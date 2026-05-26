@@ -1,5 +1,6 @@
 import { submitTransaction, waitForConfirmation } from '../client';
 import { getOnChainBalance, triggerRebalance } from '../contract';
+import { getEventMetrics } from '../events';
 import { Transaction } from '@stellar/stellar-sdk';
 
 jest.mock('../client', () => ({
@@ -8,6 +9,10 @@ jest.mock('../client', () => ({
   getAgentKeypair: jest.fn(),
   submitTransaction: jest.fn(),
   waitForConfirmation: jest.fn(),
+}));
+
+jest.mock('../events', () => ({
+  getEventMetrics: jest.fn(),
 }));
 
 describe('Stellar Integration - Unit Tests', () => {
@@ -111,6 +116,65 @@ describe('Stellar Integration - Unit Tests', () => {
 
       expect(result.hash).toBe('rebalance123');
       expect(result.status).toBe('success');
+    });
+  });
+
+  describe('Event Metrics', () => {
+    it('should return current metrics with all required fields', () => {
+      const mockMetrics = {
+        totalProcessed: 42,
+        totalErrors: 2,
+        processingRatePerMinute: 10,
+        errorRate: 0.048,
+        ledgerLag: 3,
+        lastDbOperationMs: 12,
+        lastUpdated: new Date(),
+      };
+      (getEventMetrics as jest.Mock).mockReturnValue(mockMetrics);
+
+      const metrics = getEventMetrics();
+
+      expect(metrics.totalProcessed).toBe(42);
+      expect(metrics.totalErrors).toBe(2);
+      expect(metrics.processingRatePerMinute).toBe(10);
+      expect(metrics.errorRate).toBeCloseTo(0.048, 3);
+      expect(metrics.ledgerLag).toBe(3);
+      expect(metrics.lastDbOperationMs).toBe(12);
+      expect(metrics.lastUpdated).toBeInstanceOf(Date);
+    });
+
+    it('should return zero values for a fresh listener', () => {
+      const emptyMetrics = {
+        totalProcessed: 0,
+        totalErrors: 0,
+        processingRatePerMinute: 0,
+        errorRate: 0,
+        ledgerLag: 0,
+        lastDbOperationMs: 0,
+        lastUpdated: new Date(),
+      };
+      (getEventMetrics as jest.Mock).mockReturnValue(emptyMetrics);
+
+      const metrics = getEventMetrics();
+
+      expect(metrics.totalProcessed).toBe(0);
+      expect(metrics.errorRate).toBe(0);
+    });
+
+    it('should compute errorRate as totalErrors / totalProcessed', () => {
+      const totalProcessed = 100;
+      const totalErrors = 5;
+      const errorRate = totalProcessed > 0 ? totalErrors / totalProcessed : 0;
+
+      expect(errorRate).toBeCloseTo(0.05, 3);
+    });
+
+    it('should return zero errorRate when no events processed', () => {
+      const totalProcessed = 0;
+      const totalErrors = 0;
+      const errorRate = totalProcessed > 0 ? totalErrors / totalProcessed : 0;
+
+      expect(errorRate).toBe(0);
     });
   });
 

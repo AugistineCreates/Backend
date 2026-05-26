@@ -23,6 +23,7 @@ import vaultRouter from './routes/vault'
 import analyticsRouter from './routes/analytics'
 import adminRouter from './routes/admin'
 import metricsRouter from './routes/metrics'
+import stellarRouter from './routes/stellar'
 import { corsMiddleware, jsonBodyParser, payloadSizeErrorHandler, urlencodedBodyParser } from './middleware/corsandbody'
 
 // ── Readiness state ───────────────────────────────────────────────────────────
@@ -118,6 +119,7 @@ app.use('/api/deposit', depositRouter)
 app.use('/api/withdraw', withdrawRouter)
 app.use('/api/vault', vaultRouter)
 app.use('/api/analytics', analyticsRouter)
+app.use('/api/stellar', stellarRouter)
 
 app.use('/metrics', metricsRouter)
 // Admin routes (protected, strictest rate limit)

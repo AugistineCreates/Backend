@@ -1,5 +1,14 @@
 import { parseIntent } from '../nlp/parser'
-import { normalizePhone, createOrGetUser, generateOtp, verifyOtp, getBalance, getUserWalletAddress, incrementBalance, decrementBalance } from './userManager'
+import {
+  normalizePhone,
+  createOrGetUser,
+  generateOtp,
+  verifyOtp,
+  getBalance,
+  getUserWalletAddress,
+  getPortfolioYieldSummary,
+  decrementBalance,
+} from './userManager'
 
 export type WhatsAppResponse = {
   body: string
@@ -28,7 +37,10 @@ function formatDepositInstruction(amount: number, address: string): string {
   return `To deposit, send ${amount.toFixed(2)} XLM to your wallet address:\n${address}\n\nOnce the transaction is confirmed, reply "balance" to see your updated balance.`
 }
 
-function formatWithdrawConfirmation(amount: number, newBalance: number): string {
+function formatWithdrawConfirmation(
+  amount: number,
+  newBalance: number
+): string {
   return `Withdrawal request received for ${amount.toFixed(2)} XLM.\nYour new balance will be ${newBalance.toFixed(2)} XLM once processed.`
 }
 
@@ -36,9 +48,18 @@ function formatInsufficientFunds(balance: number, requested: number): string {
   return `You only have ${balance.toFixed(2)} XLM available, but you requested ${requested.toFixed(2)} XLM.\nTry a smaller amount or deposit more funds.`
 }
 
-function formatEarnings(balance: number): string {
-  const estimatedYield = balance * 0.04 // placeholder 4% APY
-  return `Your portfolio is earning ~4% APY.\nEstimated earnings next year: ${estimatedYield.toFixed(2)} XLM on current balance of ${balance.toFixed(2)} XLM.`
+function formatEarnings(input: {
+  totalBalance: number
+  totalEarnings: number
+  periodEarnings: number
+  averageApy: number
+}): string {
+  return [
+    `Your portfolio balance is ${input.totalBalance.toFixed(2)} XLM equivalent.`,
+    `Total earnings to date: ${input.totalEarnings.toFixed(2)} XLM.`,
+    `Earnings over the last 30 days: ${input.periodEarnings.toFixed(2)} XLM.`,
+    `Average APY across your tracked positions: ${(input.averageApy * 100).toFixed(2)}%.`,
+  ].join('\n')
 }
 
 function formatUnknownMessage(): string {
@@ -50,7 +71,10 @@ function extractOtpCode(message: string): string | null {
   return match ? match[1] : null
 }
 
-export async function handleWhatsAppMessage(from: string, message: string): Promise<WhatsAppResponse> {
+export async function handleWhatsAppMessage(
+  from: string,
+  message: string
+): Promise<WhatsAppResponse> {
   const normalizedPhone = normalizePhone(from)
   const user = await createOrGetUser(normalizedPhone)
 
@@ -98,7 +122,9 @@ export async function handleWhatsAppMessage(from: string, message: string): Prom
       const balance = getBalance(normalizedPhone) ?? 0
       const amount = intent.all ? balance : intent.amount
       if (!amount || amount <= 0) {
-        return { body: 'Please specify a withdrawal amount, e.g. "withdraw 5" or "withdraw all".' }
+        return {
+          body: 'Please specify a withdrawal amount, e.g. "withdraw 5" or "withdraw all".',
+        }
       }
       if (amount > balance) {
         return { body: formatInsufficientFunds(balance, amount) }
@@ -109,6 +135,17 @@ export async function handleWhatsAppMessage(from: string, message: string): Prom
 
     case 'help':
       return { body: formatHelpMessage() }
+
+    case 'earnings': {
+      const summary = await getPortfolioYieldSummary(normalizedPhone)
+      if (!summary) {
+        return {
+          body: 'I could not find any tracked portfolio data for your account yet.',
+        }
+      }
+
+      return { body: formatEarnings(summary) }
+    }
 
     case 'unknown':
     default:

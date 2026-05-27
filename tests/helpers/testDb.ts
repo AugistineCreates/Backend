@@ -4,9 +4,9 @@
  * not hit a real database.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client'
 
-let prisma: PrismaClient | null = null;
+let prisma: PrismaClient | null = null
 
 /**
  * Connect to the test database.
@@ -15,16 +15,16 @@ let prisma: PrismaClient | null = null;
 export async function setupTestDatabase(): Promise<PrismaClient> {
   prisma = new PrismaClient({
     datasources: { db: { url: process.env.DATABASE_URL } },
-  });
-  await prisma.$connect();
-  return prisma;
+  })
+  await prisma.$connect()
+  return prisma
 }
 
 /**
  * Delete all rows from every table (reverse dependency order) and disconnect.
  */
 export async function teardownTestDatabase(): Promise<void> {
-  if (!prisma) return;
+  if (!prisma) return
   await prisma.$transaction([
     prisma.agentLog.deleteMany(),
     prisma.yieldSnapshot.deleteMany(),
@@ -33,17 +33,19 @@ export async function teardownTestDatabase(): Promise<void> {
     prisma.session.deleteMany(),
     prisma.protocolRate.deleteMany(),
     prisma.user.deleteMany(),
-  ]);
-  await prisma.$disconnect();
-  prisma = null;
+  ])
+  await prisma.$disconnect()
+  prisma = null
 }
 
 /** Return the shared test client. Throws if not yet initialized. */
 export function getTestDb(): PrismaClient {
   if (!prisma) {
-    throw new Error('Test database not initialized. Call setupTestDatabase() first.');
+    throw new Error(
+      'Test database not initialized. Call setupTestDatabase() first.'
+    )
   }
-  return prisma;
+  return prisma
 }
 
 /**
@@ -51,7 +53,7 @@ export function getTestDb(): PrismaClient {
  * that must not touch a real database.
  */
 export function createMockDb() {
-  return {
+  const prismaMock: any = {
     user: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
@@ -79,6 +81,7 @@ export function createMockDb() {
       findFirst: jest.fn(),
       create: jest.fn(),
       upsert: jest.fn(),
+      update: jest.fn(),
       count: jest.fn(),
     },
     yieldSnapshot: {
@@ -107,12 +110,23 @@ export function createMockDb() {
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      upsert: jest.fn(),
       deleteMany: jest.fn(),
     },
     $connect: jest.fn().mockResolvedValue(undefined),
     $disconnect: jest.fn().mockResolvedValue(undefined),
-    $transaction: jest.fn().mockImplementation((ops: Promise<unknown>[]) =>
-      Promise.all(ops),
-    ),
-  };
+  }
+
+  prismaMock.$transaction = jest
+    .fn()
+    .mockImplementation(
+      (input: Promise<unknown>[] | ((tx: any) => Promise<unknown>)) => {
+        if (typeof input === 'function') {
+          return input(prismaMock)
+        }
+        return Promise.all(input)
+      }
+    )
+
+  return prismaMock
 }

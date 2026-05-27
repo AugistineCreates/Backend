@@ -1,211 +1,158 @@
-import { createMockDb } from '../../helpers/testDb';
+import fs from 'fs'
+import path from 'path'
+import { createMockDb } from '../../helpers/testDb'
 
-// Mock Prisma before importing events
-const mockPrisma = createMockDb();
+const mockPrisma = createMockDb()
+
 jest.mock('@prisma/client', () => {
-    const actual = jest.requireActual('@prisma/client');
-    return {
-        ...actual,
-        PrismaClient: jest.fn(() => mockPrisma),
-    };
-});
+  const actual = jest.requireActual('@prisma/client')
+  return {
+    ...actual,
+    PrismaClient: jest.fn(() => mockPrisma),
+  }
+})
 
-jest.mock('../../../src/stellar/client');
-jest.mock('../../../src/utils/logger');
+jest.mock('../../../src/stellar/client')
+jest.mock('../../../src/utils/logger')
 
-import * as stellarSdk from '@stellar/stellar-sdk';
-import { startEventListener, stopEventListener } from '../../../src/stellar/events';
-import { getRpcServer } from '../../../src/stellar/client';
+import * as stellarSdk from '@stellar/stellar-sdk'
+import {
+  retryDeadLetterEvents,
+  startEventListener,
+  stopEventListener,
+} from '../../../src/stellar/events'
+import { DeadLetterQueue } from '../../../src/stellar/dlq'
+import { getRpcServer } from '../../../src/stellar/client'
 
-const mockRpcServer = getRpcServer as jest.MockedFunction<typeof getRpcServer>;
+const mockRpcServer = getRpcServer as jest.MockedFunction<typeof getRpcServer>
 
-describe('Vault Events Integration Tests', () => {
-    beforeEach(async () => {
-        // Reset all mocks
-        jest.clearAllMocks();
-    });
+const CONTRACT_ID = 'CDUMMYVAULTCONTRACTID'
+const WALLET = 'GBUQWP3BOUZX34ULNQG23RQ6F4BVWCIBTICSQYY2T4YJJWUDLVXVVU6G'
+const DLQ_FILE = path.join(__dirname, '../../../logs/dead_letter_queue.json')
 
-    afterEach(() => {
-        stopEventListener();
-    });
+function waitForPoll(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 100))
+}
 
-    describe('End-to-End Event Processing', () => {
-        it('should handle deposit event and update user balance', async () => {
-            const walletAddress = 'GBUQWP3BOUZX34ULNQG23RQ6F4BVWCIBTICSQYY2T4YJJWUDLVXVVU6G';
-            const depositAmount = 5000000000n;
+function makeDepositRpcEvent(ledger: number, txHash: string) {
+  return {
+    ledger,
+    txHash,
+    contractId: CONTRACT_ID,
+    topic: [
+      stellarSdk.nativeToScVal('deposit', { type: 'string' }),
+      stellarSdk.nativeToScVal('USDC', { type: 'string' }),
+      stellarSdk.nativeToScVal('blend', { type: 'string' }),
+    ],
+    value: stellarSdk.nativeToScVal({
+      user: WALLET,
+      amount: 1000n,
+      shares: 100n,
+    }),
+  }
+}
 
-            // Mock RPC server
-            const mockServer = {
-                getLatestLedger: jest.fn().mockResolvedValue({ sequence: 100 }),
-                getEvents: jest.fn().mockResolvedValue({
-                    events: [
-                        {
-                            ledger: 99,
-                            txHash: 'deposit_tx_001',
-                            contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
-                            topic: [
-                                stellarSdk.nativeToScVal('deposit', { type: 'string' }),
-                            ],
-                            value: stellarSdk.nativeToScVal({
-                                user: walletAddress,
-                                amount: depositAmount,
-                                shares: 5000000n,
-                            }),
-                        },
-                    ],
-                }),
-            };
+describe('Vault event recovery integration', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    stopEventListener()
+    fs.mkdirSync(path.dirname(DLQ_FILE), { recursive: true })
+    fs.writeFileSync(DLQ_FILE, '[]')
 
-            mockRpcServer.mockReturnValue(mockServer as any);
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      walletAddress: WALLET,
+    })
+    mockPrisma.transaction.upsert.mockResolvedValue({ id: 'tx-db-1' })
+    mockPrisma.transaction.update.mockResolvedValue({
+      id: 'tx-db-1',
+      positionId: 'position-1',
+    })
+    mockPrisma.position.findFirst.mockResolvedValue(null)
+    mockPrisma.position.create.mockResolvedValue({ id: 'position-1' })
+    mockPrisma.position.update.mockResolvedValue({ id: 'position-1' })
+    mockPrisma.processedEvent.findUnique.mockResolvedValue(null)
+    mockPrisma.processedEvent.create.mockResolvedValue({ id: 'processed-1' })
+    mockPrisma.eventCursor.upsert.mockResolvedValue({
+      contractId: CONTRACT_ID,
+      lastProcessedLedger: 102,
+    })
+  })
 
-            // Start listener
-            await startEventListener();
-            await new Promise(resolve => setTimeout(resolve, 100));
+  afterEach(() => {
+    stopEventListener()
+  })
 
-            // Verify RPC was called
-            expect(mockServer.getLatestLedger).toHaveBeenCalled();
-            expect(mockServer.getEvents).toHaveBeenCalled();
+  it('resumes from the stored cursor and advances it after replaying missed events', async () => {
+    mockPrisma.eventCursor.findUnique.mockResolvedValue({
+      contractId: CONTRACT_ID,
+      lastProcessedLedger: 100,
+    })
 
-            stopEventListener();
-        });
+    const server = {
+      getLatestLedger: jest.fn().mockResolvedValue({ sequence: 102 }),
+      getEvents: jest.fn().mockResolvedValue({
+        events: [makeDepositRpcEvent(101, 'tx_resume_101')],
+      }),
+    }
+    mockRpcServer.mockReturnValue(server as any)
 
-        it('should handle multiple sequential events correctly', async () => {
-            const walletAddress = 'GBUQWP3BOUZX34ULNQG23RQ6F4BVWCIBTICSQYY2T4YJJWUDLVXVVU6G';
+    await startEventListener()
+    await waitForPoll()
+    stopEventListener()
 
-            // Mock RPC server with multiple events
-            const mockServer = {
-                getLatestLedger: jest.fn().mockResolvedValue({ sequence: 102 }),
-                getEvents: jest.fn().mockResolvedValue({
-                    events: [
-                        {
-                            ledger: 99,
-                            txHash: 'tx_deposit_1',
-                            contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
-                            topic: [
-                                stellarSdk.nativeToScVal('deposit', { type: 'string' }),
-                            ],
-                            value: stellarSdk.nativeToScVal({
-                                user: walletAddress,
-                                amount: 5000000000n,
-                                shares: 5000000n,
-                            }),
-                        },
-                        {
-                            ledger: 100,
-                            txHash: 'tx_deposit_2',
-                            contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
-                            topic: [
-                                stellarSdk.nativeToScVal('deposit', { type: 'string' }),
-                            ],
-                            value: stellarSdk.nativeToScVal({
-                                user: walletAddress,
-                                amount: 3000000000n,
-                                shares: 3000000n,
-                            }),
-                        },
-                        {
-                            ledger: 101,
-                            txHash: 'tx_withdraw_1',
-                            contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
-                            topic: [
-                                stellarSdk.nativeToScVal('withdraw', { type: 'string' }),
-                            ],
-                            value: stellarSdk.nativeToScVal({
-                                user: walletAddress,
-                                amount: 2000000000n,
-                                shares: 2000000n,
-                            }),
-                        },
-                    ],
-                }),
-            };
+    expect(server.getEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ startLedger: 101 })
+    )
+    expect(mockPrisma.processedEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          txHash: 'tx_resume_101',
+          ledger: 101,
+        }),
+      })
+    )
+    expect(mockPrisma.eventCursor.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ lastProcessedLedger: 102 }),
+        create: expect.objectContaining({ lastProcessedLedger: 102 }),
+      })
+    )
+  })
 
-            mockRpcServer.mockReturnValue(mockServer as any);
+  it('retries pending DLQ events and marks them resolved after a successful replay', async () => {
+    const eventPayload = {
+      type: 'deposit' as const,
+      ledger: 105,
+      txHash: 'tx_dlq_retry_105',
+      contractId: CONTRACT_ID,
+      topics: [
+        stellarSdk.nativeToScVal('deposit', { type: 'string' }),
+        stellarSdk.nativeToScVal('USDC', { type: 'string' }),
+        stellarSdk.nativeToScVal('blend', { type: 'string' }),
+      ],
+      value: stellarSdk.nativeToScVal({
+        user: WALLET,
+        amount: 2500n,
+        shares: 250n,
+      }),
+    }
 
-            // Start listener
-            await startEventListener();
-            await new Promise(resolve => setTimeout(resolve, 100));
+    await DeadLetterQueue.add(eventPayload, 'temporary downstream failure')
 
-            // Verify RPC was called
-            expect(mockServer.getLatestLedger).toHaveBeenCalled();
-            expect(mockServer.getEvents).toHaveBeenCalled();
+    await retryDeadLetterEvents()
 
-            stopEventListener();
-        });
-
-        it('should prevent duplicate processing on listener restart', async () => {
-            const walletAddress = 'GBUQWP3BOUZX34ULNQG23RQ6F4BVWCIBTICSQYY2T4YJJWUDLVXVVU6G';
-
-            // Mock RPC server
-            const mockServer = {
-                getLatestLedger: jest.fn().mockResolvedValue({ sequence: 100 }),
-                getEvents: jest.fn().mockResolvedValue({
-                    events: [
-                        {
-                            ledger: 99,
-                            txHash: 'tx_unique_001',
-                            contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
-                            topic: [
-                                stellarSdk.nativeToScVal('deposit', { type: 'string' }),
-                            ],
-                            value: stellarSdk.nativeToScVal({
-                                user: walletAddress,
-                                amount: 5000000000n,
-                                shares: 5000000n,
-                            }),
-                        },
-                    ],
-                }),
-            };
-
-            mockRpcServer.mockReturnValue(mockServer as any);
-
-            // First run
-            await startEventListener();
-            await new Promise(resolve => setTimeout(resolve, 100));
-            stopEventListener();
-
-            // Verify RPC was called
-            expect(mockServer.getLatestLedger).toHaveBeenCalled();
-
-            stopEventListener();
-        });
-    });
-
-    describe('Error Handling', () => {
-        it('should handle missing user gracefully', async () => {
-            // Mock RPC server with event for non-existent user
-            const mockServer = {
-                getLatestLedger: jest.fn().mockResolvedValue({ sequence: 100 }),
-                getEvents: jest.fn().mockResolvedValue({
-                    events: [
-                        {
-                            ledger: 99,
-                            txHash: 'tx_unknown_user',
-                            contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
-                            topic: [
-                                stellarSdk.nativeToScVal('deposit', { type: 'string' }),
-                            ],
-                            value: stellarSdk.nativeToScVal({
-                                user: 'GUNKNOWN_WALLET_ADDRESS',
-                                amount: 5000000000n,
-                                shares: 5000000n,
-                            }),
-                        },
-                    ],
-                }),
-            };
-
-            mockRpcServer.mockReturnValue(mockServer as any);
-
-            // Start listener - should not crash
-            await startEventListener();
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            // Verify listener ran without crashing
-            expect(mockServer.getLatestLedger).toHaveBeenCalled();
-
-            stopEventListener();
-        });
-    });
-});
+    const queue = DeadLetterQueue.getAll()
+    expect(queue).toHaveLength(1)
+    expect(queue[0].status).toBe('RESOLVED')
+    expect(queue[0].retryCount).toBe(1)
+    expect(mockPrisma.processedEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          txHash: 'tx_dlq_retry_105',
+          ledger: 105,
+        }),
+      })
+    )
+  })
+})

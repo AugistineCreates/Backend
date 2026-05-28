@@ -502,7 +502,7 @@ describe('Agent System', () => {
     });
 
     it('should allow testnet in any environment', () => {
-      const testnetEnvironments = ['development', 'staging', 'production'];
+      const testnetEnvironments = ['development', 'staging', 'production', 'test'];
 
       testnetEnvironments.forEach((env: string) => {
         const network: 'testnet' | 'mainnet' | 'futurenet' = 'testnet';

@@ -2,247 +2,191 @@
  * Unit tests — Environment configuration validation
  */
 
+// Valid test values
+const VALID_WALLET_KEY = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2' // 64 hex chars
+const VALID_SECRET_KEY = 'SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' // 56 chars starting with S
+
+/** Set a complete, valid environment so individual tests can delete/override one var at a time. */
+function setValidEnv() {
+  process.env.STELLAR_NETWORK = 'testnet'
+  process.env.STELLAR_RPC_URL = 'https://rpc.example.com'
+  process.env.STELLAR_AGENT_SECRET_KEY = VALID_SECRET_KEY
+  process.env.VAULT_CONTRACT_ID = 'CVAULT'
+  process.env.USDC_TOKEN_ADDRESS = 'CUSDC'
+  process.env.ANTHROPIC_API_KEY = 'key'
+  process.env.DATABASE_URL = 'postgresql://localhost/db'
+  process.env.JWT_SEED = 'seed'
+  process.env.WALLET_ENCRYPTION_KEY = VALID_WALLET_KEY
+  process.env.NODE_ENV = 'test'
+}
+
 describe('Environment Configuration', () => {
-    let originalEnv: NodeJS.ProcessEnv;
+  let originalEnv: NodeJS.ProcessEnv
 
-    beforeEach(() => {
-        // Save original environment
-        originalEnv = { ...process.env };
-        // Clear the require cache to reload config
-        jest.resetModules();
-    });
+  beforeEach(() => {
+    originalEnv = { ...process.env }
+    jest.resetModules()
+  })
 
-    afterEach(() => {
-        // Restore original environment
-        process.env = originalEnv;
-    });
+  afterEach(() => {
+    process.env = originalEnv
+  })
 
-    describe('Required environment variables validation', () => {
-        it('throws error when STELLAR_NETWORK is missing', () => {
-            delete process.env.STELLAR_NETWORK;
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
+  describe('Required environment variables validation', () => {
+    it('throws error when STELLAR_NETWORK is missing', () => {
+      setValidEnv()
+      delete process.env.STELLAR_NETWORK
 
-            expect(() => {
-                require('../../../src/config/env');
-            }).toThrow(/Missing required environment variable: STELLAR_NETWORK/);
-        });
+      expect(() => {
+        require('../../../src/config/env')
+      }).toThrow(/Missing required environment variable: STELLAR_NETWORK/)
+    })
 
-        it('throws error when STELLAR_AGENT_SECRET_KEY is missing', () => {
-            process.env.STELLAR_NETWORK = 'testnet';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            delete process.env.STELLAR_AGENT_SECRET_KEY;
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
+    it('throws error when STELLAR_AGENT_SECRET_KEY is missing', () => {
+      setValidEnv()
+      delete process.env.STELLAR_AGENT_SECRET_KEY
 
-            expect(() => {
-                require('../../../src/config/env');
-            }).toThrow(/Missing required environment variable: STELLAR_AGENT_SECRET_KEY/);
-        });
+      expect(() => {
+        require('../../../src/config/env')
+      }).toThrow(/Missing required environment variable: STELLAR_AGENT_SECRET_KEY/)
+    })
 
-        it('throws error when VAULT_CONTRACT_ID is missing', () => {
-            process.env.STELLAR_NETWORK = 'testnet';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-            delete process.env.VAULT_CONTRACT_ID;
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
+    it('throws error when VAULT_CONTRACT_ID is missing', () => {
+      setValidEnv()
+      delete process.env.VAULT_CONTRACT_ID
 
-            expect(() => {
-                require('../../../src/config/env');
-            }).toThrow(/Critical environment variables are missing/);
-        });
+      expect(() => {
+        require('../../../src/config/env')
+      }).toThrow(/Missing required environment variable: VAULT_CONTRACT_ID/)
+    })
 
-        it('throws error when DATABASE_URL is missing', () => {
-            process.env.STELLAR_NETWORK = 'testnet';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            delete process.env.DATABASE_URL;
-            process.env.JWT_SEED = 'seed';
+    it('throws error when DATABASE_URL is missing', () => {
+      setValidEnv()
+      delete process.env.DATABASE_URL
 
-            expect(() => {
-                require('../../../src/config/env');
-            }).toThrow(/Critical environment variables are missing/);
-        });
-    });
+      expect(() => {
+        require('../../../src/config/env')
+      }).toThrow(/Missing required environment variable: DATABASE_URL/)
+    })
 
-    describe('Stellar network validation', () => {
-        it('accepts valid network: testnet', () => {
-            process.env.STELLAR_NETWORK = 'testnet';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
+    it('throws error when WALLET_ENCRYPTION_KEY is missing', () => {
+      setValidEnv()
+      delete process.env.WALLET_ENCRYPTION_KEY
 
-            const config = require('../../../src/config/env').config;
-            expect(config.stellar.network).toBe('testnet');
-        });
+      expect(() => {
+        require('../../../src/config/env')
+      }).toThrow(/Missing required environment variable: WALLET_ENCRYPTION_KEY/)
+    })
 
-        it('accepts valid network: mainnet', () => {
-            process.env.STELLAR_NETWORK = 'mainnet';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
-            process.env.NODE_ENV = 'production';
+    it('throws error when WALLET_ENCRYPTION_KEY is not 64 hex chars', () => {
+      setValidEnv()
+      process.env.WALLET_ENCRYPTION_KEY = 'tooshort'
 
-            const config = require('../../../src/config/env').config;
-            expect(config.stellar.network).toBe('mainnet');
-        });
+      expect(() => {
+        require('../../../src/config/env')
+      }).toThrow(/WALLET_ENCRYPTION_KEY is invalid/)
+    })
+  })
 
-        it('accepts valid network: futurenet', () => {
-            process.env.STELLAR_NETWORK = 'futurenet';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
+  describe('Stellar network validation', () => {
+    it('accepts valid network: testnet', () => {
+      setValidEnv()
 
-            const config = require('../../../src/config/env').config;
-            expect(config.stellar.network).toBe('futurenet');
-        });
+      const config = require('../../../src/config/env').config
+      expect(config.stellar.network).toBe('testnet')
+    })
 
-        it('rejects invalid network', () => {
-            process.env.STELLAR_NETWORK = 'invalidnet';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
+    it('accepts valid network: mainnet', () => {
+      setValidEnv()
+      process.env.STELLAR_NETWORK = 'mainnet'
+      process.env.NODE_ENV = 'production'
 
-            expect(() => {
-                require('../../../src/config/env');
-            }).toThrow(/Invalid STELLAR_NETWORK/);
-        });
+      const config = require('../../../src/config/env').config
+      expect(config.stellar.network).toBe('mainnet')
+    })
 
-        it('is case-insensitive', () => {
-            process.env.STELLAR_NETWORK = 'TESTNET';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
+    it('accepts valid network: futurenet', () => {
+      setValidEnv()
+      process.env.STELLAR_NETWORK = 'futurenet'
 
-            const config = require('../../../src/config/env').config;
-            expect(config.stellar.network).toBe('testnet');
-        });
-    });
+      const config = require('../../../src/config/env').config
+      expect(config.stellar.network).toBe('futurenet')
+    })
 
-    describe('Stellar secret key validation', () => {
-        it('rejects key not starting with S', () => {
-            process.env.STELLAR_NETWORK = 'testnet';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'AXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
+    it('rejects invalid network', () => {
+      setValidEnv()
+      process.env.STELLAR_NETWORK = 'invalidnet'
 
-            expect(() => {
-                require('../../../src/config/env');
-            }).toThrow(/must start with S/);
-        });
+      expect(() => {
+        require('../../../src/config/env')
+      }).toThrow(/Invalid STELLAR_NETWORK/)
+    })
 
-        it('rejects key with incorrect length', () => {
-            process.env.STELLAR_NETWORK = 'testnet';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'SSHORT';
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
+    it('is case-insensitive', () => {
+      setValidEnv()
+      process.env.STELLAR_NETWORK = 'TESTNET'
 
-            expect(() => {
-                require('../../../src/config/env');
-            }).toThrow(/invalid length/);
-        });
+      const config = require('../../../src/config/env').config
+      expect(config.stellar.network).toBe('testnet')
+    })
+  })
 
-        it('accepts valid 56-character key starting with S', () => {
-            process.env.STELLAR_NETWORK = 'testnet';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
+  describe('Stellar secret key validation', () => {
+    it('rejects key not starting with S', () => {
+      setValidEnv()
+      process.env.STELLAR_AGENT_SECRET_KEY = 'AXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
 
-            const config = require('../../../src/config/env').config;
-            expect(config.stellar.agentSecretKey).toBe('SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
-        });
-    });
+      expect(() => {
+        require('../../../src/config/env')
+      }).toThrow(/must start with S/)
+    })
 
-    describe('Mainnet warning', () => {
-        it('warns when mainnet is used in development', () => {
-            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+    it('rejects key with incorrect length', () => {
+      setValidEnv()
+      process.env.STELLAR_AGENT_SECRET_KEY = 'SSHORT'
 
-            process.env.STELLAR_NETWORK = 'mainnet';
-            process.env.NODE_ENV = 'development';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
+      expect(() => {
+        require('../../../src/config/env')
+      }).toThrow(/invalid length/)
+    })
 
-            require('../../../src/config/env');
+    it('accepts valid 56-character key starting with S', () => {
+      setValidEnv()
 
-            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('CRITICAL WARNING'));
-            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('MAINNET'));
+      const config = require('../../../src/config/env').config
+      expect(config.stellar.agentSecretKey).toBe(VALID_SECRET_KEY)
+    })
+  })
 
-            consoleSpy.mockRestore();
-        });
+  describe('Mainnet warning', () => {
+    it('warns when mainnet is used in development', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      setValidEnv()
+      process.env.STELLAR_NETWORK = 'mainnet'
+      process.env.NODE_ENV = 'development'
 
-        it('does not warn when mainnet is used in production', () => {
-            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      require('../../../src/config/env')
 
-            process.env.STELLAR_NETWORK = 'mainnet';
-            process.env.NODE_ENV = 'production';
-            process.env.STELLAR_RPC_URL = 'https://rpc.example.com';
-            process.env.STELLAR_AGENT_SECRET_KEY = 'SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-            process.env.VAULT_CONTRACT_ID = 'CVAULT';
-            process.env.USDC_TOKEN_ADDRESS = 'CUSDC';
-            process.env.ANTHROPIC_API_KEY = 'key';
-            process.env.DATABASE_URL = 'postgresql://localhost/db';
-            process.env.JWT_SEED = 'seed';
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('CRITICAL WARNING'))
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('MAINNET'))
 
-            require('../../../src/config/env');
+      consoleSpy.mockRestore()
+    })
 
-            // Should not have the critical warning
-            const criticalWarnings = consoleSpy.mock.calls.filter(call =>
-                call[0]?.toString().includes('CRITICAL WARNING')
-            );
-            expect(criticalWarnings.length).toBe(0);
+    it('does not warn when mainnet is used in production', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      setValidEnv()
+      process.env.STELLAR_NETWORK = 'mainnet'
+      process.env.NODE_ENV = 'production'
 
-            consoleSpy.mockRestore();
-        });
-    });
-});
+      require('../../../src/config/env')
+
+      const criticalWarnings = consoleSpy.mock.calls.filter(call =>
+        call[0]?.toString().includes('CRITICAL WARNING')
+      )
+      expect(criticalWarnings.length).toBe(0)
+
+      consoleSpy.mockRestore()
+    })
+  })
+})

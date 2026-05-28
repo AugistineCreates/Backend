@@ -22,7 +22,6 @@ function validateAllRequiredEnvVars(): void {
     'ANTHROPIC_API_KEY',
     'DATABASE_URL',
     'JWT_SEED',
-    // Added: must be present and valid (see format checks below)
     'WALLET_ENCRYPTION_KEY',
     'NODE_ENV',
   ]
@@ -32,7 +31,7 @@ function validateAllRequiredEnvVars(): void {
   // ── 1. Missing vars ──────────────────────────────────────────────────────
   for (const key of requiredVars) {
     if (!process.env[key]) {
-      errors.push(`  - ${key} is missing`)
+      errors.push(`Missing required environment variable: ${key}`)
     }
   }
 
@@ -41,28 +40,26 @@ function validateAllRequiredEnvVars(): void {
   const walletKey = process.env.WALLET_ENCRYPTION_KEY
   if (walletKey && !/^[0-9a-f]{64}$/i.test(walletKey)) {
     errors.push(
-      `  - WALLET_ENCRYPTION_KEY is invalid: must be exactly 64 hexadecimal characters (32 bytes). ` +
+      `WALLET_ENCRYPTION_KEY is invalid: must be exactly 64 hexadecimal characters (32 bytes). ` +
         `Got length ${walletKey.length}. Generate one with: openssl rand -hex 32`
     )
   }
 
   // ── 3. NODE_ENV: must be one of the known deployment environments ────────
   const nodeEnv = process.env.NODE_ENV
-  const validNodeEnvs = ['development', 'staging', 'production'] as const
+  const validNodeEnvs = ['development', 'staging', 'production', 'test'] as const
   if (nodeEnv && !validNodeEnvs.includes(nodeEnv as any)) {
     errors.push(
-      `  - NODE_ENV is invalid: "${nodeEnv}". Must be one of: ${validNodeEnvs.join(' | ')}`
+      `NODE_ENV is invalid: "${nodeEnv}". Must be one of: ${validNodeEnvs.join(' | ')}`
     )
   }
 
   if (errors.length > 0) {
-    const list = errors.join('\n')
-    // Use process.stderr so the message is visible even if logger isn't initialised yet
-    process.stderr.write(
-      `\n[FATAL] Application cannot start — environment configuration errors:\n${list}\n\n` +
-        `Fix the variables above and restart the application.\n\n`
+    const list = errors.map(e => `  - ${e}`).join('\n')
+    throw new Error(
+      `Application cannot start — environment configuration errors:\n${list}\n\n` +
+        `Fix the variables above and restart the application.`
     )
-    process.exit(1)
   }
 }
 
@@ -101,10 +98,10 @@ function validateStellarKey(secretKey: string, network: 'testnet' | 'mainnet' | 
   console.log(`✓ Stellar Agent configured for ${network.toUpperCase()} (NODE_ENV=${env})`)
 
   if (network === 'mainnet' && env !== 'production') {
-    process.stderr.write(
+    console.warn(
       '\n⚠️  CRITICAL WARNING: Using MAINNET in non-production environment!\n' +
         '⚠️  This could result in real financial loss!\n' +
-        '⚠️  Verify STELLAR_NETWORK and NODE_ENV settings immediately!\n\n'
+        '⚠️  Verify STELLAR_NETWORK and NODE_ENV settings immediately!\n'
     )
   }
 }
@@ -117,7 +114,7 @@ const agentSecretKey = requireEnv('STELLAR_AGENT_SECRET_KEY')
 validateStellarKey(agentSecretKey, stellarNetwork)
 
 // ── Typed NODE_ENV ─────────────────────────────────────────────────────────
-type NodeEnv = 'development' | 'staging' | 'production'
+type NodeEnv = 'development' | 'staging' | 'production' | 'test'
 const nodeEnv = process.env.NODE_ENV as NodeEnv
 
 export const config = {
@@ -168,7 +165,6 @@ export const config = {
     fromNumber: process.env.WHATSAPP_FROM || '',
   },
   dlq: {
-    // Alert when DLQ exceeds this many unresolved events
     alertThreshold: parseInt(process.env.DLQ_ALERT_THRESHOLD || '50'),
   },
 }

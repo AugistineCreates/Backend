@@ -1,8 +1,7 @@
 import express from 'express'
 import cors, { type CorsOptions } from 'cors'
 import helmet from 'helmet'
-import { config, validateProductionConfig } from './config/env'
-import { markReady } from './config/readiness'
+import { config } from './config/env'
 import { errorHandler } from './middleware/errorHandler'
 import { requestLogger } from './middleware/logger'
 import { rateLimiter, authRateLimiter } from './middleware/rateLimiter'
@@ -56,20 +55,6 @@ app.set('trust proxy', 1)
 
 // ── Security and parsing middleware ────────────────────────────────────────
 app.use(helmet())
-
-const corsOptions: CorsOptions =
-  config.security.cors.origins === '*'
-    ? { origin: '*' }
-    : { origin: config.security.cors.origins }
-app.use(cors(corsOptions))
-
-app.use(express.json({ limit: config.security.bodyLimits.json }))
-app.use(
-  express.urlencoded({
-    limit: config.security.bodyLimits.urlencoded,
-    extended: false,
-  }),
-)
 
 // CORS — must come before body parsers so pre-flight OPTIONS is handled
 app.use(corsMiddleware)

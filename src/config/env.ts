@@ -139,6 +139,11 @@ export const config = {
     url: process.env.REDIS_URL || 'redis://localhost:6379',
   },
   jwt: {
+    /**
+     * JWT_SEED: 64-hex secret used to sign/verify JWTs.
+     * Rotate every 90 days. Inject via AWS Secrets Manager, HashiCorp Vault,
+     * or GitHub Actions secrets — never commit the raw value.
+     */
     seed: requireEnv('JWT_SEED'),
     session_ttl_hours: parseInt(requireEnv('JWT_SESSION_TTL_HOURS') || '24'),
     nonce_ttl_ms: parseInt(requireEnv('JWT_NONCE_TTL_MS') || '300000'),
@@ -150,6 +155,11 @@ export const config = {
     fromNumber: process.env.WHATSAPP_FROM || '',
   },
   security: {
+    /**
+     * WALLET_ENCRYPTION_KEY: 32-byte hex key for encrypting stored wallet secrets.
+     * Rotate with a coordinated key migration. Inject via AWS Secrets Manager or
+     * HashiCorp Vault — never commit the raw value.
+     */
     walletEncryptionKey: process.env.WALLET_ENCRYPTION_KEY || '',
     cors: {
       origins: corsOrigins,
@@ -158,14 +168,37 @@ export const config = {
       json: parseByteLimit(process.env.BODY_LIMIT_JSON, '1mb'),
       urlencoded: parseByteLimit(process.env.BODY_LIMIT_URLENCODED, '1mb'),
     },
+    /** Global rate limiter — applied to every route */
     rateLimit: {
       windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
       max: parseInt(process.env.RATE_LIMIT_MAX || '100'),
     },
+    /** Auth endpoints — stricter to resist credential stuffing */
     authRateLimit: {
       windowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS || '900000'),
       max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '20'),
     },
+    /** Admin endpoints — tightest limits (management/sensitive ops) */
+    adminRateLimit: {
+      windowMs: parseInt(process.env.ADMIN_RATE_LIMIT_WINDOW_MS || '900000'),
+      max: parseInt(process.env.ADMIN_RATE_LIMIT_MAX || '10'),
+    },
+    /** Internal/agent endpoints — higher throughput for service-to-service calls */
+    internalRateLimit: {
+      windowMs: parseInt(process.env.INTERNAL_RATE_LIMIT_WINDOW_MS || '60000'),
+      max: parseInt(process.env.INTERNAL_RATE_LIMIT_MAX || '500'),
+    },
+    /**
+     * TRUSTED_IPS: comma-separated list of IPv4/IPv6 addresses that bypass rate
+     * limiting entirely (e.g. your CI runner, internal health-check probe).
+     * INTERNAL_SERVICE_TOKEN: bearer token accepted in X-Internal-Token header
+     * for service-to-service calls that should skip per-route limits.
+     */
+    trustedIps: (process.env.TRUSTED_IPS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    internalServiceToken: process.env.INTERNAL_SERVICE_TOKEN || '',
   },
 }
 

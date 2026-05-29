@@ -5,7 +5,7 @@ import { config, validateProductionConfig } from './config/env'
 import { markReady } from './config/readiness'
 import { errorHandler } from './middleware/errorHandler'
 import { requestLogger } from './middleware/logger'
-import { rateLimiter, authRateLimiter } from './middleware/rateLimiter'
+import { rateLimiter, authRateLimiter, adminRateLimiter, internalRateLimiter, trustedIpBypass } from './middleware/rateLimiter'
 import { logger } from './utils/logger'
 import { startAgentLoop } from './agent/loop'
 import { connectDb } from './db'
@@ -49,11 +49,13 @@ app.use(
 
 // Logging and rate limiting
 app.use(requestLogger)
+// Trusted-IP / service-token bypass must run before any rate limiter
+app.use(trustedIpBypass)
 app.use(rateLimiter)
 
 // Public routes
 app.use('/health', healthRouter)
-app.use('/api/agent', agentRouter)
+app.use('/api/agent', internalRateLimiter, agentRouter)
 app.use('/api/auth', authRateLimiter, authRouter)
 app.use('/api/whatsapp', whatsappRouter)
 app.use('/api/portfolio', portfolioRouter)
@@ -64,8 +66,8 @@ app.use('/api/withdraw', withdrawRouter)
 app.use('/api/vault', vaultRouter)
 app.use('/api/analytics', analyticsRouter)
 
-// Admin routes (protected)
-app.use('/api/admin', adminRouter)
+// Admin routes (protected, strictest rate limit)
+app.use('/api/admin', adminRateLimiter, adminRouter)
 
 // Global error handler — must always be last
 app.use(errorHandler)

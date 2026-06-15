@@ -109,15 +109,7 @@ Public unauthenticated read endpoints (`/api/protocols/*`, `/api/vault/state`, `
 
 **Bypass (trusted services only):** set `TRUSTED_IPS` to a comma-separated allowlist of IPs, or send the shared secret in the `X-Internal-Token` header (`INTERNAL_SERVICE_TOKEN`). Mount order matters: the bypass middleware runs before limiters in `src/index.ts`.
 
-Trust proxy
------------
-When the API runs behind Nginx, Cloudflare, AWS ALB, Heroku, or Kubernetes ingress, set `TRUST_PROXY` so Express reads the real client IP from `X-Forwarded-For` (used by rate limiting and logging). Default is `1` (one reverse-proxy hop). Use `0` or `false` when the process is exposed directly; use `2` when traffic passes through CDN + load balancer. See `.env.example` for supported values.
-
-Security headers (Helmet)
--------------------------
-In production, Helmet sets strict headers: CSP (`default-src 'none'`), HSTS (1 year, includeSubDomains, preload), `Referrer-Policy: no-referrer`, and cross-origin policies. Development and test disable CSP/HSTS so local tooling is not blocked. Configuration lives in `src/middleware/security.ts`.
-
-For production secret handling, migrations, and rollback steps see `docs/PRODUCTION_DEPLOYMENT.md`.
+For production secret handling, migrations, and rollback steps see `docs/DEPLOYMENT_PRODUCTION.md`.
 
 Testing
 -------

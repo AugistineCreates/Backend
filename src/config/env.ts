@@ -97,6 +97,36 @@ function parseByteLimit(value: string | undefined, fallback: string): string {
 }
 
 /**
+ * Parse `TRUST_PROXY` for Express `app.set('trust proxy', …)`.
+ *
+ * Supported values:
+ *   (unset)              → 1  (single reverse-proxy hop — Nginx, ALB, Heroku, etc.)
+ *   false | 0            → do not trust X-Forwarded-* headers
+ *   true                 → trust all hops (not recommended in production)
+ *   <number>             → trust that many proxy hops
+ *   loopback             → trust loopback addresses
+ *   loopback,linklocal   → comma-separated Express trust-proxy keywords or IPs
+ */
+function parseTrustProxy(
+  value: string | undefined
+): boolean | number | string | string[] {
+  if (!value?.trim()) return 1
+
+  const trimmed = value.trim().toLowerCase()
+  if (trimmed === 'false' || trimmed === '0') return false
+  if (trimmed === 'true') return true
+  if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10)
+  if (value.includes(',')) {
+    return value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }
+
+  return value.trim()
+}
+
+/**
  * Validate Stellar secret key format and warn on mainnet in dev.
  */
 function validateStellarKey(secretKey: string, network: 'testnet' | 'mainnet' | 'futurenet'): void {
@@ -204,6 +234,17 @@ export const config = {
       windowMs: parseInt(process.env.INTERNAL_RATE_LIMIT_WINDOW_MS || '60000'),
       max: parseInt(process.env.INTERNAL_RATE_LIMIT_MAX || '500'),
     },
+    /** Public webhook endpoints — resist spoofed / replay floods (e.g. Twilio) */
+    webhookRateLimit: {
+      windowMs: parseInt(process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS || '60000'),
+      max: parseInt(process.env.WEBHOOK_RATE_LIMIT_MAX || '30'),
+    },
+    /**
+     * Express `trust proxy` setting — required for correct `req.ip` behind
+     * Nginx, Cloudflare, AWS ALB, Heroku, Kubernetes ingress, etc.
+     * See `parseTrustProxy` for accepted `TRUST_PROXY` values.
+     */
+    trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
     /**
      * TRUSTED_IPS: comma-separated list of IPv4/IPv6 addresses that bypass rate
      * limiting entirely (e.g. your CI runner, internal health-check probe).

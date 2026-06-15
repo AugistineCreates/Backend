@@ -1,10 +1,10 @@
 import { type Server } from 'node:http'
 import express from 'express'
-import helmet from 'helmet'
 import { config } from './config/env'
 import { errorHandler } from './middleware/errorHandler'
 import { requestLogger } from './middleware/logger'
-import { rateLimiter, authRateLimiter, adminRateLimiter, internalRateLimiter, trustedIpBypass } from './middleware/rateLimiter'
+import { rateLimiter, authRateLimiter, adminRateLimiter, internalRateLimiter, webhookRateLimiter, trustedIpBypass } from './middleware/rateLimiter'
+import { configureTrustProxy, securityHeaders } from './middleware/security'
 import { logger } from './utils/logger'
 import { startAgentLoop, stopAgentLoop } from './agent/loop'
 import { connectDb } from './db'
@@ -54,11 +54,11 @@ function allServicesReady(): boolean {
 
 const app = express()
 
-// Trust proxy — required for correct client IP behind Nginx / Cloudflare / Heroku
-app.set('trust proxy', 1)
+// Trust proxy — required for correct client IP behind Nginx / Cloudflare / Heroku / K8s ingress
+configureTrustProxy(app)
 
 // ── Security and parsing middleware ────────────────────────────────────────
-app.use(helmet())
+app.use(securityHeaders())
 
 // CORS — must come before body parsers so pre-flight OPTIONS is handled
 app.use(corsMiddleware)
@@ -111,7 +111,7 @@ app.get('/health/ready', (_req, res) => {
 app.use('/health', healthRouter)
 app.use('/api/agent', internalRateLimiter, agentRouter)
 app.use('/api/auth', authRateLimiter, authRouter)
-app.use('/api/whatsapp', whatsappRouter)
+app.use('/api/whatsapp', webhookRateLimiter, whatsappRouter)
 app.use('/api/portfolio', portfolioRouter)
 app.use('/api/transactions', transactionsRouter)
 app.use('/api/protocols', protocolsRouter)

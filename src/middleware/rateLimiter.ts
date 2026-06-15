@@ -35,6 +35,20 @@ function isTrusted(req: Request): boolean {
   return req.res?.locals['trusted'] === true
 }
 
+/** K8s / load-balancer probes must not consume the global rate-limit budget. */
+function isHealthProbe(req: Request): boolean {
+  return (
+    req.path === '/health/live' ||
+    req.path === '/health/ready' ||
+    req.path === '/health' ||
+    req.path.startsWith('/health/')
+  )
+}
+
+function skipUnlessLimited(req: Request): boolean {
+  return isTrusted(req) || isHealthProbe(req)
+}
+
 // ── Rate limiters ──────────────────────────────────────────────────────────
 
 /**
@@ -46,7 +60,7 @@ export const rateLimiter = rateLimit({
   max: config.security.rateLimit.max,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: isTrusted,
+  skip: skipUnlessLimited,
   message: {
     error: 'Too many requests. Please try again later.',
   },
@@ -79,6 +93,21 @@ export const adminRateLimiter = rateLimit({
   skip: isTrusted,
   message: {
     error: 'Too many requests to the admin API. Please try again later.',
+  },
+})
+
+/**
+ * Webhook rate limiter — applied to unauthenticated inbound webhooks.
+ * Defaults: 30 req / 1 min (env: WEBHOOK_RATE_LIMIT_MAX / WEBHOOK_RATE_LIMIT_WINDOW_MS).
+ */
+export const webhookRateLimiter = rateLimit({
+  windowMs: config.security.webhookRateLimit.windowMs,
+  max: config.security.webhookRateLimit.max,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: isTrusted,
+  message: {
+    error: 'Too many webhook requests. Please try again later.',
   },
 })
 

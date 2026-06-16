@@ -1,4 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { HttpClientAdapter } from '../utils/http-client'
+import { config } from '../config'
 
 export interface Intent {
   action: 'deposit' | 'withdraw' | 'balance' | 'earnings' | 'help' | 'unknown'
@@ -9,6 +11,15 @@ export interface Intent {
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || 'dummy_key',
+})
+
+const anthropicHttpClient = new HttpClientAdapter({
+  timeoutMs: config.httpClient.timeoutMs,
+  maxRetries: config.httpClient.maxRetries,
+  baseDelayMs: config.httpClient.baseDelayMs,
+  maxDelayMs: config.httpClient.maxDelayMs,
+  circuitBreakerThreshold: config.httpClient.circuitBreakerThreshold,
+  circuitBreakerResetMs: config.httpClient.circuitBreakerResetMs,
 })
 
 // Regex fallback
@@ -57,10 +68,11 @@ export function parseWithRegex(message: string): Intent | null {
 // Claude fallback
 export async function parseWithClaude(message: string): Promise<Intent> {
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 150,
-      system: `You are an intent parser for a financial bot. Determine if the user wants to deposit, withdraw, check balance, view earnings/performance, or needs help.
+    const response = await anthropicHttpClient.execute(async () => {
+      return anthropic.messages.create({
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 150,
+        system: `You are an intent parser for a financial bot. Determine if the user wants to deposit, withdraw, check balance, view earnings/performance, or needs help.
 Return ONLY a JSON object representing the intent, matching this TypeScript interface exactly without any wrapper text or markdown:
 {
   "action": "deposit" | "withdraw" | "balance" | "earnings" | "help" | "unknown",
@@ -68,8 +80,9 @@ Return ONLY a JSON object representing the intent, matching this TypeScript inte
   "currency": string, // optional
   "all": boolean // for "withdraw everything"
 }`,
-      messages: [{ role: 'user', content: message }],
-    })
+        messages: [{ role: 'user', content: message }],
+      })
+    }, 'anthropic.parseIntent')
 
     const contentBlock = response.content.find((c) => c.type === 'text')
     if (contentBlock && contentBlock.type === 'text') {

@@ -266,4 +266,12 @@ export const config = {
     alertThreshold: parseInt(process.env.DLQ_ALERT_THRESHOLD || '50'),
     alertCooldownMs: parseInt(process.env.DLQ_ALERT_COOLDOWN_MS || '900000'), // 15 minutes default
   },
+  httpClient: {
+    timeoutMs: parseInt(process.env.HTTP_CLIENT_TIMEOUT_MS || '10000'),
+    maxRetries: parseInt(process.env.HTTP_CLIENT_MAX_RETRIES || '3'),
+    baseDelayMs: parseInt(process.env.HTTP_CLIENT_BASE_DELAY_MS || '200'),
+    maxDelayMs: parseInt(process.env.HTTP_CLIENT_MAX_DELAY_MS || '10000'),
+    circuitBreakerThreshold: parseInt(process.env.HTTP_CLIENT_CIRCUIT_BREAKER_THRESHOLD || '5'),
+    circuitBreakerResetMs: parseInt(process.env.HTTP_CLIENT_CIRCUIT_BREAKER_RESET_MS || '30000'),
+  },
 }

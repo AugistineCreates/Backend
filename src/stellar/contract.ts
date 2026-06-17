@@ -9,7 +9,7 @@ import {
   scValToNative,
   nativeToScVal,
 } from '@stellar/stellar-sdk';
-import { getRpcServer, getNetworkPassphrase, getAgentKeypair, submitTransaction, waitForConfirmation } from './client';
+import { getRpcServer, getNetworkPassphrase, getAgentKeypair, submitTransaction, waitForConfirmation, simulateTransaction, prepareTransaction, getAccount } from './client';
 import { getKeypairForUser } from './wallet';
 import { config } from '../config';
 import { OnChainBalance, TransactionResult } from './types';
@@ -39,7 +39,7 @@ async function buildContractCall(
 ): Promise<Transaction> {
   const server = getRpcServer();
   const contract = getVaultContract();
-  const account = await server.getAccount(sourcePublicKey);
+  const account = await getAccount(sourcePublicKey);
 
   const tx = new TransactionBuilder(account, {
     fee: BASE_FEE,
@@ -64,11 +64,10 @@ async function executeWriteContractCall(
   args: xdr.ScVal[],
   signer: Keypair,
 ): Promise<TransactionResult> {
-  const server = getRpcServer();
   const tx = await buildContractCall(method, args, signer.publicKey());
 
   // Pre-Transaction Simulation & Validation (Issue #58)
-  const simulation = await server.simulateTransaction(tx);
+  const simulation = await simulateTransaction(tx);
   if (rpc.Api.isSimulationError(simulation)) {
     throw new Error(`Transaction simulation failed for ${method}: ${simulation.error}`);
   }
@@ -76,7 +75,7 @@ async function executeWriteContractCall(
     throw new Error(`Transaction simulation failed for ${method}: No result returned from simulation`);
   }
 
-  const prepared = await server.prepareTransaction(tx);
+  const prepared = await prepareTransaction(tx);
   prepared.sign(signer);
 
   const txHash = await submitTransaction(prepared);
@@ -116,10 +115,9 @@ async function executeCustodialVaultOperation(
  * Simulate and parse contract read call
  */
 async function simulateRead(method: string, args: xdr.ScVal[] = []): Promise<any> {
-  const server = getRpcServer();
   const tx = await buildContractCall(method, args);
   
-  const simulation = await server.simulateTransaction(tx);
+  const simulation = await simulateTransaction(tx);
   
   if (rpc.Api.isSimulationError(simulation)) {
     throw new Error(`Simulation failed: ${simulation.error}`);
@@ -237,7 +235,6 @@ export async function buildUnsignedVaultTransaction(
   amount: number,
   assetSymbol: string,
 ): Promise<string> {
-  const server = getRpcServer();
   const userScVal = nativeToScVal(userAddress, { type: 'address' });
   const amountScVal = nativeToScVal(toContractAmount(amount), { type: 'i128' });
   const assetScVal = nativeToScVal(assetSymbol, { type: 'string' });
@@ -245,7 +242,7 @@ export async function buildUnsignedVaultTransaction(
   const tx = await buildContractCall(method, [userScVal, amountScVal, assetScVal], userAddress);
 
   // Pre-Transaction Simulation & Validation (Issue #58)
-  const simulation = await server.simulateTransaction(tx);
+  const simulation = await simulateTransaction(tx);
   if (rpc.Api.isSimulationError(simulation)) {
     throw new Error(`Transaction simulation failed for ${method}: ${simulation.error}`);
   }
@@ -253,7 +250,7 @@ export async function buildUnsignedVaultTransaction(
     throw new Error(`Transaction simulation failed for ${method}: No result returned from simulation`);
   }
 
-  const prepared = await server.prepareTransaction(tx);
+  const prepared = await prepareTransaction(tx);
 
   return prepared.toXDR();
 }

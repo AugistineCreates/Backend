@@ -4,9 +4,21 @@ import {
   Networks,
   Transaction,
   TransactionBuilder,
+  Account,
 } from '@stellar/stellar-sdk';
 import { config } from '../config';
+import { HttpClientAdapter, TimeoutError } from '../utils/http-client';
+import { logger } from '../utils/logger';
 import { TransactionResult } from './types';
+
+export const stellarHttpClient = new HttpClientAdapter({
+  timeoutMs: config.httpClient.timeoutMs,
+  maxRetries: config.httpClient.maxRetries,
+  baseDelayMs: config.httpClient.baseDelayMs,
+  maxDelayMs: config.httpClient.maxDelayMs,
+  circuitBreakerThreshold: config.httpClient.circuitBreakerThreshold,
+  circuitBreakerResetMs: config.httpClient.circuitBreakerResetMs,
+})
 
 export function resolveNetworkPassphrase(network: string | undefined): string {
   switch (network?.toLowerCase()) {
@@ -29,9 +41,6 @@ const NETWORK_PASSPHRASE = resolveNetworkPassphrase(config.stellar.network);
 let agentKeypair: Keypair | null = null;
 let rpcServer: rpc.Server | null = null;
 
-/**
- * Initialize RPC server connection
- */
 export function getRpcServer(): rpc.Server {
   if (!rpcServer) {
     rpcServer = new rpc.Server(RPC_URL);
@@ -39,16 +48,10 @@ export function getRpcServer(): rpc.Server {
   return rpcServer;
 }
 
-/**
- * Get network passphrase
- */
 export function getNetworkPassphrase(): string {
   return NETWORK_PASSPHRASE;
 }
 
-/**
- * Load agent keypair from environment
- */
 export function getAgentKeypair(): Keypair {
   if (!agentKeypair) {
     const secret = process.env.STELLAR_AGENT_SECRET_KEY;
@@ -60,60 +63,81 @@ export function getAgentKeypair(): Keypair {
   return agentKeypair;
 }
 
-/**
- * Submit transaction to Stellar network
- */
 export async function submitTransaction(tx: Transaction): Promise<string> {
   const server = getRpcServer();
-  
-  try {
-    const response = await server.sendTransaction(tx);
-    
-    if (response.status === 'ERROR') {
-      throw new Error(`Transaction failed: ${response.errorResult?.toXDR('base64')}`);
+
+  return stellarHttpClient.execute(async () => {
+    try {
+      const response = await server.sendTransaction(tx);
+
+      if (response.status === 'ERROR') {
+        throw new Error(`Transaction failed: ${response.errorResult?.toXDR('base64')}`);
+      }
+
+      return response.hash;
+    } catch (error) {
+      if (error instanceof TimeoutError) throw error
+      throw new Error(`Failed to submit transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    
-    return response.hash;
-  } catch (error) {
-    throw new Error(`Failed to submit transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
+  }, 'stellar.submitTransaction')
 }
 
 /**
- * Wait for transaction confirmation
+ * Simulate a transaction against the Stellar RPC with retry/timeout/circuit-breaker.
  */
+export async function simulateTransaction(tx: Transaction): Promise<rpc.Api.SimulateTransactionResponse> {
+  const server = getRpcServer()
+  return stellarHttpClient.execute(() => server.simulateTransaction(tx), 'stellar.simulateTransaction')
+}
+
+/**
+ * Prepare a transaction (add fee-bump etc.) with retry/timeout/circuit-breaker.
+ */
+export async function prepareTransaction(tx: Transaction): Promise<Transaction> {
+  const server = getRpcServer()
+  return stellarHttpClient.execute(() => server.prepareTransaction(tx), 'stellar.prepareTransaction')
+}
+
+/**
+ * Get account details from the Stellar RPC with retry/timeout/circuit-breaker.
+ */
+export async function getAccount(publicKey: string): Promise<Account> {
+  const server = getRpcServer()
+  return stellarHttpClient.execute(() => server.getAccount(publicKey), 'stellar.getAccount')
+}
+
 export async function waitForConfirmation(
   txHash: string,
   timeoutMs: number = 30000
 ): Promise<TransactionResult> {
   const server = getRpcServer();
-  const startTime = Date.now();
-  
-  while (Date.now() - startTime < timeoutMs) {
-    try {
-      const response = await server.getTransaction(txHash);
-      
-      if (response.status === 'SUCCESS') {
-        return {
-          hash: txHash,
-          status: 'success',
-          ledger: response.ledger,
-        };
-      }
-      
-      if (response.status === 'FAILED') {
-        return {
-          hash: txHash,
-          status: 'failed',
-        };
-      }
-      
-      // Still pending, wait before polling again
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    } catch (error) {
-      throw new Error(`Error polling transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  const pollDeadline = Date.now() + timeoutMs;
+
+  const poll = async (): Promise<TransactionResult> => {
+    const response = await server.getTransaction(txHash);
+
+    if (response.status === 'SUCCESS') {
+      return {
+        hash: txHash,
+        status: 'success',
+        ledger: response.ledger,
+      };
     }
+
+    if (response.status === 'FAILED') {
+      return {
+        hash: txHash,
+        status: 'failed',
+      };
+    }
+
+    if (Date.now() >= pollDeadline) {
+      throw new Error(`Transaction confirmation timeout after ${timeoutMs}ms`);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return poll()
   }
-  
-  throw new Error(`Transaction confirmation timeout after ${timeoutMs}ms`);
+
+  return stellarHttpClient.execute(poll, 'stellar.waitForConfirmation')
 }

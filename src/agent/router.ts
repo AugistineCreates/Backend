@@ -199,10 +199,27 @@ export async function triggerRebalance(
 
     const duration = Date.now() - startTime;
 
-    // Log to database
-    await logAgentAction('REBALANCE', 'SUCCESS', {
-      rebalanceDetail,
-    });
+    // Log to database – attribute to the actual user(s) for each affected position
+    if (positionIds.length > 0) {
+      const affectedPositions = await db.position.findMany({
+        where: { id: { in: positionIds } },
+        select: { id: true, userId: true },
+      });
+
+      // Deduplicate: one log per (userId, positionId) pair
+      const seen = new Set<string>();
+      for (const pos of affectedPositions) {
+        const key = `${pos.userId}:${pos.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        await logAgentAction('REBALANCE', 'SUCCESS', {
+          rebalanceDetail,
+        }, pos.userId, pos.id);
+      }
+    } else {
+      // No positions linked – log as system-level (userId stays null)
+      await logAgentAction('REBALANCE', 'SUCCESS', { rebalanceDetail });
+    }
 
     logger.info('Rebalance successful', {
       txHash: onChainTransaction.hash,
@@ -279,30 +296,27 @@ export async function executeRebalanceIfNeeded(
 }
 
 /**
- * Log agent action to database
+ * Log agent action to database.
+ *
+ * - Pass `userId` when the action is attributable to a specific user
+ *   (e.g. rebalance for that user's position).
+ * - Pass `positionId` when the action affects a specific position.
+ * - Omit both (or pass undefined) for system-level actions such as
+ *   protocol scans or aggregate health-checks; the log row will have
+ *   a null userId so it is distinguishable from user-level actions.
  */
 export async function logAgentAction(
   action: string,
   status: 'SUCCESS' | 'FAILED' | 'SKIPPED',
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
+  userId?: string,
+  positionId?: string,
 ): Promise<void> {
   try {
-    // Log to all users for now - in production, could be per-user
-    const users = await db.user.findMany({
-      select: { id: true },
-      take: 1, // For now, just log to first user
-    });
-
-    if (users.length === 0) {
-      logger.warn('No users found for agent logging');
-      return;
-    }
-
-    const userId = users[0].id;
-
     await db.agentLog.create({
       data: {
-        userId,
+        userId: userId ?? null,
+        positionId: positionId ?? null,
         action: action as any,
         status: status as any,
         inputData: data?.input ? JSON.stringify(data.input) : undefined,
@@ -314,6 +328,8 @@ export async function logAgentAction(
   } catch (error) {
     logger.error('Failed to log agent action', {
       action,
+      userId,
+      positionId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
   }

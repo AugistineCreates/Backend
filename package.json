@@ -15,7 +15,22 @@
     "lint:style": "eslint \"src/**/*.ts\" \"prisma/**/*.ts\"",
     "format": "prettier --write .github/workflows/node-ci.yml package.json .prettierrc.json eslint.config.mjs src/nlp/parser.ts src/stellar/dlq.ts src/whatsapp/handler.ts src/whatsapp/userManager.ts tests/unit/stellar/dlq-alerts.test.ts",
     "format:check": "prettier --check .github/workflows/node-ci.yml package.json .prettierrc.json eslint.config.mjs src/nlp/parser.ts src/stellar/dlq.ts src/whatsapp/handler.ts src/whatsapp/userManager.ts tests/unit/stellar/dlq-alerts.test.ts",
+    "test": "jest",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration",
+    "prisma:generate": "npx prisma generate",
     "prisma:generate": "npx prisma generate"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/tests"],
+    "moduleFileExtensions": ["ts", "js", "json"],
+    "transform": {
+      "^.+\\.ts$": ["ts-jest", {
+        "tsconfig": "tsconfig.json"
+      }]
+    }
   },
   "prisma": {
     "schema": "prisma/schema.prisma",

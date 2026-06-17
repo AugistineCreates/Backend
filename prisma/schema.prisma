@@ -185,7 +185,8 @@ model ProtocolRate {
 
 model AgentLog {
   id           String      @id @default(uuid())
-  userId       String
+  userId       String?     // null for system-level actions (scans, alerts)
+  positionId   String?     // set when log is tied to a specific position
   action       AgentAction
   status       AgentStatus
   reasoning    String?     @db.Text
@@ -195,13 +196,15 @@ model AgentLog {
   durationMs   Int?
   createdAt    DateTime    @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([positionId])
   @@index([action])
   @@index([status])
   @@index([userId, status])
   @@index([createdAt])
+  @@index([userId, createdAt])
   @@map("agent_logs")
 }
 

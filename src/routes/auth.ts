@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { challenge, verify, logout } from '../controllers/auth-controller';
-import { AuthMiddleware } from '../middleware/authenticate';
+import { requireAuth } from '../middleware/authenticate';
 import { validate } from '../middleware/validate';
 import { authChallengeSchema, authVerifySchema } from '../validators/auth-validators';
 
@@ -22,6 +22,6 @@ router.post('/verify', validate({ body: authVerifySchema }), verify);
  * POST /api/auth/logout
  * Revokes the active session. Requires a valid Bearer token.
  */
-router.post('/logout', AuthMiddleware.validateJwt, logout);
+router.post('/logout', requireAuth, logout);
 
 export default router;

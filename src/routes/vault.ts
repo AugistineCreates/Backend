@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import db from '../db'
-import { requireAuth } from '../middleware/auth'
+import { requireAuth } from '../middleware/authenticate'
 import {
   getActiveProtocol,
   getOnChainAPY,

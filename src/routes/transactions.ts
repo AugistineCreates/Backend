@@ -1,8 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import db from '../db'
-import { AuthMiddleware } from '../middleware/authenticate'
-import { enforceUserAccess } from '../middleware/auth'
+import { requireAuth, enforceUserAccess } from '../middleware/authenticate'
 import { validate } from '../middleware/validate'
 import { paginationSchema, getPaginationParams } from '../utils/pagination'
 import { mapTransactionToResponse } from '../utils/api-formatters'
@@ -11,9 +10,12 @@ import {
   formatTransactionDetailReply,
   formatTransactionsReply,
 } from '../whatsapp/formatters'
-import { userIdParamSchema } from '../validators/common-validators'
 
-const router = Router()
+// ─── Schemas ──────────────────────────────────────────────────────────────────
+
+const txHashParamSchema = z.object({
+  txHash: z.string().min(1, 'Transaction hash is required'),
+})
 
 const listSchema = z.object({
   params: z.object({
@@ -22,59 +24,76 @@ const listSchema = z.object({
   query: paginationSchema,
 })
 
-const txHashParamSchema = z.object({
-  txHash: z.string().min(1, 'Transaction hash is required'),
-})
+// ─── Router ───────────────────────────────────────────────────────────────────
 
-router.get('/detail/:txHash', AuthMiddleware.validateJwt, validate({ params: txHashParamSchema }), async (req: Request, res: Response) => {
-  const txHash = String(req.params.txHash)
-  const tx = await db.transaction.findUnique({
-    where: { txHash },
-  })
+const router = Router()
 
-  if (!tx || tx.userId !== req.auth?.userId) {
-    return sendNotFound(res, 'Transaction')
-  }
+/**
+ * GET /transactions/detail/:txHash
+ * Returns full detail for a single transaction owned by the authenticated user.
+ */
+router.get(
+  '/detail/:txHash',
+  requireAuth,
+  validate({ params: txHashParamSchema }),
+  async (req: Request, res: Response) => {
+    const txHash = String(req.params.txHash)
 
-  const item = mapTransactionToResponse(tx)
+    const tx = await db.transaction.findUnique({ where: { txHash } })
 
-  return res.status(200).json({
-    transaction: item,
-    whatsappReply: formatTransactionDetailReply(item),
-  })
-})
+    if (!tx || tx.userId !== req.auth?.userId) {
+      return sendNotFound(res, 'Transaction')
+    }
 
-router.get('/:userId', AuthMiddleware.validateJwt, enforceUserAccess, validate(listSchema), async (req: Request, res: Response) => {
-  const userId = req.params.userId as string
-  const { page, limit, skip } = getPaginationParams(req.query)
+    const item = mapTransactionToResponse(tx)
 
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: { id: true },
-  })
-  if (!user) {
-    return sendNotFound(res, 'User')
-  }
+    return res.status(200).json({
+      transaction: item,
+      whatsappReply: formatTransactionDetailReply(item),
+    })
+  },
+)
 
-  const [total, transactions] = await Promise.all([
-    db.transaction.count({ where: { userId } }),
-    db.transaction.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-    }),
-  ])
+/**
+ * GET /transactions/:userId
+ * Returns a paginated list of transactions for the given user.
+ * Requires the caller to be that user (enforceUserAccess).
+ */
+router.get(
+  '/:userId',
+  requireAuth,
+  enforceUserAccess,
+  validate(listSchema),
+  async (req: Request, res: Response) => {
+    const userId = String(req.params.userId)
+    const { page, limit, skip } = getPaginationParams(req.query)
 
-  const items = transactions.map(mapTransactionToResponse)
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    })
+    if (!user) return sendNotFound(res, 'User')
 
-  return res.status(200).json({
-    page,
-    limit,
-    total,
-    transactions: items,
-    whatsappReply: formatTransactionsReply({ page, limit, transactions: items }),
-  })
-})
+    const [total, transactions] = await Promise.all([
+      db.transaction.count({ where: { userId } }),
+      db.transaction.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ])
+
+    const items = transactions.map(mapTransactionToResponse)
+
+    return res.status(200).json({
+      page,
+      limit,
+      total,
+      transactions: items,
+      whatsappReply: formatTransactionsReply({ page, limit, transactions: items }),
+    })
+  },
+)
 
 export default router

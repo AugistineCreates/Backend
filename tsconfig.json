@@ -10,14 +10,15 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "types": ["node"]
+    "types": ["node", "jest"]
   },
   "files": [
     "src/types/express.d.ts"
   ],
   "include": [
     "src/**/*",
-    "scripts/**/*"
+    "scripts/**/*",
+    "tests/**/*"
   ],
   "exclude": [
     "node_modules",

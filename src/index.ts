@@ -192,15 +192,10 @@ async function gracefulShutdown(signal: string): Promise<void> {
 async function initServices(): Promise<void> {
   // 0. Validate startup configuration
 
-  // Admin token — required in production
+  // Admin access is now validated via scoped database-backed credentials.
+  // The legacy shared ADMIN_API_TOKEN is no longer required at startup.
   if (config.nodeEnv === 'production') {
-    const adminToken = process.env.ADMIN_API_TOKEN
-    if (!adminToken || adminToken.length < 8) {
-      const msg = 'ADMIN_API_TOKEN must be set to a strong value in production'
-      logger.error('[Startup] Configuration validation failed — cannot continue', { error: msg })
-      throw new Error(msg)
-    }
-    logger.info('[Startup] Admin API token configured ✓')
+    logger.info('[Startup] Admin access will use database-backed scoped credentials ✓')
   }
 
   // Twilio auth token — WhatsApp routes are always mounted; reject at startup

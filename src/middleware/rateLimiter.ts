@@ -90,7 +90,7 @@ export const adminRateLimiter = rateLimit({
   max: config.security.adminRateLimit.max,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: isTrusted,
+  skip: isHealthProbe,
   message: {
     error: 'Too many requests to the admin API. Please try again later.',
   },

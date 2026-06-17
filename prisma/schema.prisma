@@ -94,6 +94,50 @@ model Session {
   @@map("sessions")
 }
 
+model AdminApiKey {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  role      String
+  scopes    String[]
+  hash      String
+  expiresAt DateTime?
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  lastUsedAt DateTime?
+
+  auditLogs AdminAuditLog[]
+
+  @@index([role])
+  @@index([revokedAt])
+  @@index([expiresAt])
+  @@map("admin_api_keys")
+}
+
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  adminKeyId String?
+  adminName  String?
+  adminRole  String?
+  action     String
+  target     String?
+  result     String
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  method     String?
+  path       String?
+  createdAt  DateTime @default(now())
+
+  adminKey AdminApiKey? @relation(fields: [adminKeyId], references: [id], onDelete: SetNull)
+
+  @@index([adminKeyId])
+  @@index([action])
+  @@index([result])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
+}
+
 model Position {
   id              String         @id @default(uuid())
   userId          String

@@ -8,12 +8,13 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "smoke:health": "bash scripts/smoke-health.sh",
+    "wallet:rotate": "npx ts-node scripts/rotate-wallet-key.ts",
+    "wallet:rotate:dry-run": "npx ts-node scripts/rotate-wallet-key.ts --dry-run",
     "lint": "npm run lint:types && npm run lint:style",
     "lint:types": "tsc --noEmit",
     "lint:style": "eslint \"src/**/*.ts\" \"prisma/**/*.ts\"",
     "format": "prettier --write .github/workflows/node-ci.yml package.json .prettierrc.json eslint.config.mjs src/nlp/parser.ts src/stellar/dlq.ts src/whatsapp/handler.ts src/whatsapp/userManager.ts tests/unit/stellar/dlq-alerts.test.ts",
     "format:check": "prettier --check .github/workflows/node-ci.yml package.json .prettierrc.json eslint.config.mjs src/nlp/parser.ts src/stellar/dlq.ts src/whatsapp/handler.ts src/whatsapp/userManager.ts tests/unit/stellar/dlq-alerts.test.ts",
-    "prisma:generate": "npx prisma generate",
     "prisma:generate": "npx prisma generate"
   },
   "prisma": {

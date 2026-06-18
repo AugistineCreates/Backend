@@ -10,6 +10,7 @@ import { logger } from './utils/logger'
 import { startAgentLoop, stopAgentLoop } from './agent/loop'
 import { connectDb } from './db'
 import { scheduleSessionCleanup } from './jobs/sessionCleanup'
+import { scheduleDataRetention } from './jobs/dataRetention'
 import { startEventListener, stopEventListener } from './stellar/events'
 import healthRouter from './routes/health'
 import agentRouter from './routes/agent'
@@ -46,6 +47,7 @@ const serviceStatus: Record<string, ServiceStatus> = {
 let isShuttingDown = false
 let httpServer: Server | null = null
 let sessionCleanupHandle: NodeJS.Timeout | null = null
+let dataRetentionHandle: NodeJS.Timeout | null = null
 
 function allServicesReady(): boolean {
   return Object.values(serviceStatus).every(s => s.ready)
@@ -154,6 +156,13 @@ async function gracefulShutdown(signal: string): Promise<void> {
     clearInterval(sessionCleanupHandle)
     sessionCleanupHandle = null
     logger.info('[Shutdown] Session cleanup timer cleared')
+  }
+
+  // Stop the data retention interval
+  if (dataRetentionHandle) {
+    clearInterval(dataRetentionHandle)
+    dataRetentionHandle = null
+    logger.info('[Shutdown] Data retention timer cleared')
   }
 
   if (!httpServer) {
@@ -287,6 +296,7 @@ async function main(): Promise<void> {
 
   // Non-critical jobs start after the server is up
   sessionCleanupHandle = scheduleSessionCleanup()
+  dataRetentionHandle = scheduleDataRetention()
 }
 
 // ── Process-level error guards ────────────────────────────────────────────────

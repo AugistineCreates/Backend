@@ -278,4 +278,14 @@ export const config = {
     /** Grace period (ms) for in-force requests to complete before force-exit */
     drainTimeoutMs: parseInt(process.env.SHUTDOWN_DRAIN_TIMEOUT_MS || '30000'),
   },
+  retention: {
+    /** How many days to keep processed_events rows (default: 90 days) */
+    processedEventsDays: parseInt(process.env.RETENTION_PROCESSED_EVENTS_DAYS || '90'),
+    /** How many days to keep RESOLVED dead_letter_events (default: 30 days) */
+    deadLetterEventsDays: parseInt(process.env.RETENTION_DEAD_LETTER_EVENTS_DAYS || '30'),
+    /** How many days to keep agent_logs rows (default: 60 days) */
+    agentLogsDays: parseInt(process.env.RETENTION_AGENT_LOGS_DAYS || '60'),
+    /** Interval between retention job runs in ms (default: 24 hours) */
+    intervalMs: parseInt(process.env.RETENTION_INTERVAL_MS || '86400000'),
+  },
 }

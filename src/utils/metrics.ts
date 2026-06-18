@@ -199,6 +199,22 @@ export const backgroundJobDuration = new client.Histogram({
   registers: [register],
 })
 
+// ── Data Retention Metrics ───────────────────────────────────────────────────
+
+export const retentionDeletesTotal = new client.Counter({
+  name: 'retention_deletes_total',
+  help: 'Total number of rows deleted by retention cleanup jobs',
+  labelNames: ['table'] as const,
+  registers: [register],
+})
+
+export const retentionLastRunTimestamp = new client.Gauge({
+  name: 'retention_last_run_timestamp_seconds',
+  help: 'Unix timestamp of the last successful retention job run per table',
+  labelNames: ['table'] as const,
+  registers: [register],
+})
+
 // ── External Service Error Metrics ──────────────────────────────────────────
 
 export const externalServiceErrorsTotal = new client.Counter({
@@ -327,6 +343,14 @@ export function recordBackgroundJob(
 ): void {
   backgroundJobsTotal.inc({ job, status })
   backgroundJobDuration.observe({ job }, durationSeconds)
+}
+
+/**
+ * Record rows deleted by a retention job
+ */
+export function recordRetentionDeletes(table: string, count: number): void {
+  retentionDeletesTotal.inc({ table }, count)
+  retentionLastRunTimestamp.set({ table }, Date.now() / 1000)
 }
 
 /**

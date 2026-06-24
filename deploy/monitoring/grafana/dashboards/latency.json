@@ -1,0 +1,44 @@
+{
+  "title": "NeuroWealth — Latency",
+  "uid": "nw-latency",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP P50 Latency (s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 6 },
+      "targets": [{ "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))", "legendFormat": "p50" }]
+    },
+    {
+      "id": 2,
+      "title": "HTTP P95 Latency (s)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 6 },
+      "targets": [{ "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))", "legendFormat": "p95" }]
+    },
+    {
+      "id": 3,
+      "title": "DB Operation P95 Latency (s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 6 },
+      "targets": [{ "expr": "histogram_quantile(0.95, rate(db_operation_duration_seconds_bucket[5m]))", "legendFormat": "{{operation}}" }]
+    },
+    {
+      "id": 4,
+      "title": "Event Processing P95 Duration (s)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 6 },
+      "targets": [{ "expr": "histogram_quantile(0.95, rate(events_processing_duration_seconds_bucket[5m]))", "legendFormat": "{{event_type}}" }]
+    },
+    {
+      "id": 5,
+      "title": "Analytics API P95 Latency (s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 6 },
+      "targets": [{ "expr": "histogram_quantile(0.95, rate(analytics_request_duration_seconds_bucket[5m]))", "legendFormat": "{{endpoint}}" }]
+    }
+  ]
+}

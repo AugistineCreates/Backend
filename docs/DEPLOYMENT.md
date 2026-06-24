@@ -204,6 +204,36 @@ There is **no leader election**. Running multiple replicas will:
 - **Request tracing:** clients may send `X-Request-ID` or `X-Correlation-ID`; the server echoes `X-Request-ID` on every response and includes `correlationId` in structured logs
 - **DLQ:** monitor `dead_letter_events` count and `event_cursors.lastProcessedLedger` lag — see `docs/OBSERVABILITY.md` and `docs/RUNBOOK.md`
 
+### Monitoring assets
+
+Pre-built alert rules and Grafana dashboards live under `deploy/monitoring/`:
+
+| Path | Purpose |
+|------|---------|
+| `deploy/monitoring/prometheus/alert-rules.yaml` | Prometheus alert rules (critical + warning) |
+| `deploy/monitoring/grafana/dashboards/system-overview.json` | System overview dashboard |
+| `deploy/monitoring/grafana/dashboards/agent-loop.json` | Agent loop health dashboard |
+| `deploy/monitoring/grafana/dashboards/dlq.json` | DLQ and cursor lag dashboard |
+| `deploy/monitoring/grafana/dashboards/latency.json` | HTTP, DB, and event latency dashboard |
+| `deploy/monitoring/grafana/provisioning/datasources.yaml` | Grafana datasource provisioning |
+| `deploy/monitoring/grafana/provisioning/dashboards.yaml` | Grafana dashboard provisioning |
+
+**Prometheus:** add the alert rules file to your Prometheus configuration:
+
+```yaml
+rule_files:
+  - /etc/prometheus/rules/alert-rules.yaml
+```
+
+**Grafana:** copy the provisioning files and dashboards to your Grafana instance:
+
+```bash
+cp deploy/monitoring/grafana/provisioning/* /etc/grafana/provisioning/
+cp deploy/monitoring/grafana/dashboards/*.json /etc/grafana/dashboards/
+```
+
+Grafana will auto-load the dashboards on next restart.
+
 ---
 
 ## CI validation

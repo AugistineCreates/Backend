@@ -2,6 +2,8 @@ import express, { Request, Response } from 'express'
 import { validateRequest, twiml } from 'twilio'
 import { handleWhatsAppMessage } from '../whatsapp/handler'
 import { logger } from '../utils/logger'
+import { validate } from '../middleware/validate'
+import { whatsappWebhookSchema } from '../validators/webhook-validators'
 
 const router = express.Router()
 
@@ -20,7 +22,7 @@ router.get('/webhook', (_req: Request, res: Response) => {
  * spoofed calls even on staging/dev where NODE_ENV is not 'production'.
  * https://www.twilio.com/docs/usage/security#validating-requests
  */
-router.post('/webhook', async (req: Request, res: Response) => {
+router.post('/webhook', validate({ body: whatsappWebhookSchema }), async (req: Request, res: Response) => {
   const authToken = process.env.TWILIO_AUTH_TOKEN
 
   if (!authToken) {

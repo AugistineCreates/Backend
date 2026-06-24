@@ -1,0 +1,42 @@
+{
+  "title": "NeuroWealth — DLQ",
+  "uid": "nw-dlq",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "DLQ Size",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "dlq_size" }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 20, "color": "yellow" }, { "value": 50, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "DLQ Size Over Time",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 6 },
+      "targets": [{ "expr": "dlq_size", "legendFormat": "dlq size" }]
+    },
+    {
+      "id": 3,
+      "title": "DLQ Retry Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 10, "w": 12, "h": 6 },
+      "targets": [{ "expr": "rate(dlq_retry_total[5m])", "legendFormat": "{{status}}" }]
+    },
+    {
+      "id": 4,
+      "title": "Cursor Lag (ledgers)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 10, "w": 12, "h": 6 },
+      "targets": [{ "expr": "cursor_lag_ledgers", "legendFormat": "lag" }]
+    }
+  ]
+}

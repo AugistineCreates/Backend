@@ -46,3 +46,13 @@ npm run dev
 ```bash
 npm test
 ```
+
+## Smoke test
+
+Run a health-check smoke test against a running server:
+
+```bash
+npm run smoke
+```
+
+`smoke:health` is also available as a named alias for the startup health check. Both run the same script.

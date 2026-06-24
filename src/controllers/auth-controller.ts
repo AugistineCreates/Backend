@@ -20,12 +20,7 @@ import { stellarVerification } from '../utils/stellar/stellar-verification';
  * correctly across multiple app instances.
  */
 export async function challenge(req: Request, res: Response): Promise<void> {
-  const { stellarPubKey } = req.body as { stellarPubKey?: string };
-
-  if (!stellarPubKey) {
-    res.status(400).json({ error: 'stellarPubKey is required' });
-    return;
-  }
+  const { stellarPubKey } = req.body as { stellarPubKey: string };
 
   // Validate the public key format
   try {
@@ -69,14 +64,9 @@ export async function challenge(req: Request, res: Response): Promise<void> {
  */
 export async function verify(req: Request, res: Response): Promise<void> {
   const { stellarPubKey, signature } = req.body as {
-    stellarPubKey?: string;
-    signature?: string;
+    stellarPubKey: string;
+    signature: string;
   };
-
-  if (!stellarPubKey || !signature) {
-    res.status(400).json({ error: 'stellarPubKey and signature are required' });
-    return;
-  }
 
   // 1. Look up nonce in DB
   const stored = await db.authNonce.findUnique({ where: { stellarPubKey } });

@@ -7,6 +7,7 @@
     "dev": "nodemon",
     "build": "tsc",
     "start": "node dist/index.js",
+    "smoke": "bash scripts/smoke-health.sh",
     "smoke:health": "bash scripts/smoke-health.sh",
     "wallet:rotate": "npx ts-node scripts/rotate-wallet-key.ts",
     "wallet:rotate:dry-run": "npx ts-node scripts/rotate-wallet-key.ts --dry-run",

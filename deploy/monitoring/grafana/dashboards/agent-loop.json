@@ -1,0 +1,59 @@
+{
+  "title": "NeuroWealth — Agent Loop",
+  "uid": "nw-agent-loop",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Agent Loop Status",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "agent_loop_status" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "STOPPED", "color": "red" }, "1": { "text": "RUNNING", "color": "green" }, "2": { "text": "DEGRADED", "color": "yellow" } } }
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Heartbeat Age (s)",
+      "type": "gauge",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "time() - agent_loop_heartbeat_timestamp" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "max": 600,
+          "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 120, "color": "yellow" }, { "value": 300, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Rebalance Checks",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 6 },
+      "targets": [{ "expr": "rate(agent_rebalance_checks_total[5m])", "legendFormat": "{{status}}" }]
+    },
+    {
+      "id": 4,
+      "title": "Rebalances Triggered",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 6 },
+      "targets": [{ "expr": "rate(agent_rebalances_triggered_total[5m])", "legendFormat": "triggered" }]
+    },
+    {
+      "id": 5,
+      "title": "Snapshot Duration P95 (s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 10, "w": 24, "h": 6 },
+      "targets": [{ "expr": "histogram_quantile(0.95, rate(agent_snapshot_duration_seconds_bucket[5m]))", "legendFormat": "p95" }]
+    }
+  ]
+}

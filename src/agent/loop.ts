@@ -3,7 +3,7 @@
  */
 
 import cron, { ScheduledTask } from 'node-cron';
-import { logger } from '../utils/logger';
+import { logger, logBackgroundJob } from '../utils/logger';
 import { generateCorrelationId, runWithCorrelationIdAsync } from '../utils/correlation';
 import { scanAllProtocols } from './scanner';
 import { executeRebalanceIfNeeded, getThresholds, logAgentAction } from './router';
@@ -69,102 +69,95 @@ function getNextCheckTime(): Date {
 async function rebalanceCheckJob(): Promise<void> {
   const correlationId = generateCorrelationId();
   return runWithCorrelationIdAsync(correlationId, async () => {
-  const jobName = 'Hourly Rebalance Check';
-  const startTime = Date.now();
+    const jobName = 'rebalance_check';
+    const startTime = Date.now();
 
-  try {
-    logger.info(`${jobName} started`, { correlationId });
-    // Update heartbeat
-    updateAgentHeartbeat();
+    try {
+      logger.info(`[${jobName}] started`, { correlationId });
+      updateAgentHeartbeat();
 
-    // Get all active positions
-    const positions = await db.position.findMany({
-      where: {
-        status: 'ACTIVE',
-      },
-      include: {
-        user: true,
-      },
-    });
+      const positions = await db.position.findMany({
+        where: {
+          status: 'ACTIVE',
+        },
+        include: {
+          user: true,
+        },
+      });
 
-    if (positions.length === 0) {
-      logger.info('No active positions to rebalance');
+      if (positions.length === 0) {
+        const duration = (Date.now() - startTime) / 1000;
+        logBackgroundJob(jobName, 'success', duration, correlationId, {
+          positionsChecked: 0,
+          rebalancesTriggered: 0,
+        });
+        recordRebalanceCheck('success');
+        return;
+      }
+
+      const byProtocol = new Map<string, typeof positions>();
+      for (const pos of positions) {
+        const key = pos.protocolName;
+        if (!byProtocol.has(key)) {
+          byProtocol.set(key, []);
+        }
+        byProtocol.get(key)!.push(pos);
+      }
+
+      let rebalancesTriggered = 0;
+      const thresholds = getThresholds();
+
+      for (const [protocol, protocolPositions] of byProtocol.entries()) {
+        const result = await executeRebalanceIfNeeded(
+          protocol,
+          protocolPositions.map((p: any) => ({
+            id: p.id,
+            amount: p.currentValue.toString(),
+          })),
+          thresholds
+        );
+
+        if (result) {
+          rebalancesTriggered++;
+          lastRebalanceAt = new Date();
+          currentProtocol = result.toProtocol;
+          currentApy = result.improvedBy;
+          recordRebalanceTriggered();
+        }
+      }
+
+      const duration = (Date.now() - startTime) / 1000;
+
+      await logAgentAction('ANALYZE', 'SUCCESS', {
+        input: { correlationId, positionsChecked: positions.length, rebalancesTriggered, duration },
+      });
+
+      logBackgroundJob(jobName, 'success', duration, correlationId, {
+        positionsChecked: positions.length,
+        rebalancesTriggered,
+      });
+
       recordRebalanceCheck('success');
-      return;
+      recordDbOperation('rebalance_check', duration);
+
+      lastError = null;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      lastError = errorMessage;
+      const duration = (Date.now() - startTime) / 1000;
+
+      logBackgroundJob(jobName, 'failed', duration, correlationId, {
+        error: errorMessage,
+      });
+
+      recordRebalanceCheck('failed');
+      recordDbOperation('rebalance_check', duration);
+
+      await logAgentAction('ANALYZE', 'FAILED', {
+        input: { correlationId },
+        error: errorMessage,
+      });
     }
-
-    // Group by protocol to check each
-    const byProtocol = new Map<string, typeof positions>();
-    for (const pos of positions) {
-      const key = pos.protocolName;
-      if (!byProtocol.has(key)) {
-        byProtocol.set(key, []);
-      }
-      byProtocol.get(key)!.push(pos);
-    }
-
-    // Check rebalance for each protocol group
-    let rebalancesTriggered = 0;
-    const thresholds = getThresholds();
-
-    for (const [protocol, protocolPositions] of byProtocol.entries()) {
-      const result = await executeRebalanceIfNeeded(
-        protocol,
-        // Explicit param type avoids `implicit any` under strict TS.
-        protocolPositions.map((p: any) => ({
-          id: p.id,
-          amount: p.currentValue.toString(),
-        })),
-        thresholds
-      );
-
-      if (result) {
-        rebalancesTriggered++;
-        lastRebalanceAt = new Date();
-        currentProtocol = result.toProtocol;
-        currentApy = result.improvedBy;
-        recordRebalanceTriggered();
-      }
-    }
-
-    const duration = Date.now() - startTime;
-
-    await logAgentAction('ANALYZE', 'SUCCESS', {
-      input: { correlationId, positionsChecked: positions.length, rebalancesTriggered, duration },
-    });
-
-    // Record Prometheus metrics
-    recordRebalanceCheck('success');
-    recordDbOperation('rebalance_check', duration / 1000);
-    recordBackgroundJob('rebalance_check', 'success', duration / 1000);
-
-    logger.info(`${jobName} completed`, {
-      duration,
-      positionsChecked: positions.length,
-      rebalancesTriggered,
-    });
-
-    lastError = null;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    lastError = errorMessage;
-
-    const duration = Date.now() - startTime;
-    logger.error(`${jobName} failed`, {
-      error: errorMessage,
-      duration,
-    });
-
-    // Record Prometheus metrics
-    recordRebalanceCheck('failed');
-    recordDbOperation('rebalance_check', duration / 1000);
-    recordBackgroundJob('rebalance_check', 'failed', duration / 1000);
-
-    await logAgentAction('ANALYZE', 'FAILED', {
-      input: { correlationId },
-      error: errorMessage,
-    });
-  }
   });
 }
 

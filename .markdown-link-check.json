@@ -1,0 +1,20 @@
+{
+  "ignorePatterns": [
+    {
+      "pattern": "^http://localhost"
+    },
+    {
+      "pattern": "^https://console.anthropic.com"
+    },
+    {
+      "pattern": "^https://console.twilio.com"
+    },
+    {
+      "pattern": "^https://developer.pagerduty.com"
+    }
+  ],
+  "retryOn429": true,
+  "retryCount": 5,
+  "fallbackRetryDelay": 5000,
+  "aliveStatusCodes": [200, 206, 301, 302, 303, 307, 308]
+}

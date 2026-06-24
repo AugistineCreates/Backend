@@ -167,3 +167,98 @@ jobs:
 
       - name: Run smoke test
         run: npm run smoke
+
+  # ── Issue #195: Docs and deployment manifests validation ───────────────────
+  # Validates Markdown links, code fences, and Kubernetes manifests to catch
+  # broken examples, stale commands, and malformed manifests before they reach operators.
+  docs-validation:
+    name: Docs and manifests validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install markdown-link-check
+        run: npm install -g markdown-link-check
+
+      - name: Check Markdown links in docs
+        run: |
+          # Check internal links only (ignore external links that may be flaky)
+          for file in docs/*.md; do
+            if [ -f "$file" ]; then
+              echo "Checking links in $file"
+              markdown-link-check --config .markdown-link-check.json "$file" || {
+                echo "::error file=$file::Markdown link check failed"
+                exit 1
+              }
+            fi
+          done
+
+      - name: Validate code fences in docs
+        run: |
+          # Check for unclosed code fences in markdown files
+          for file in docs/*.md; do
+            if [ -f "$file" ]; then
+              # Count opening and closing code fences
+              open=$(grep -c '^\`\`\`' "$file" || true)
+              if [ $((open % 2)) -ne 0 ]; then
+                echo "::error file=$file::Unclosed code fence detected"
+                exit 1
+              fi
+            fi
+          done
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.29.0'
+
+      - name: Validate Kubernetes manifests
+        run: |
+          # Validate all YAML manifests in deploy/k8s
+          for manifest in deploy/k8s/*.yaml; do
+            if [ -f "$manifest" ]; then
+              echo "Validating $manifest"
+              kubectl apply --dry-run=client -f "$manifest" || {
+                echo "::error file=$manifest::Kubernetes manifest validation failed"
+                exit 1
+              }
+            fi
+          done
+
+      - name: Check referenced file paths in docs
+        run: |
+          # Extract file paths from markdown code blocks and check if they exist
+          for file in docs/*.md; do
+            if [ -f "$file" ]; then
+              # Extract paths like `src/config/env.ts` or `docs/OBSERVABILITY.md`
+              grep -oE '\`[a-zA-Z0-9_./-]+\.[a-z]+\`' "$file" | sed 's/`//g' | while read path; do
+                if [ -n "$path" ] && [ ! -f "$path" ] && [ ! -d "$path" ]; then
+                  # Only warn for likely file references (contains .)
+                  if [[ "$path" == *.* ]]; then
+                    echo "::warning file=$file::Referenced file may not exist: $path"
+                  fi
+                fi
+              done
+            fi
+          done
+
+      - name: Check command examples in docs
+        run: |
+          # Check for common command patterns that might be outdated
+          for file in docs/*.md; do
+            if [ -f "$file" ]; then
+              # Check for npm scripts that don't exist in package.json
+              grep -oE 'npm (run|test) [a-z0-9_-]+' "$file" | while read cmd; do
+                script=$(echo "$cmd" | awk '{print $NF}')
+                if ! grep -q "\"$script\"" package.json; then
+                  echo "::warning file=$file::npm script may not exist: $script"
+                fi
+              done
+            fi
+          done

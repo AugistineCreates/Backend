@@ -47,7 +47,70 @@ function validateAllRequiredEnvVars(): void {
     )
   }
 
-  // ── 3. NODE_ENV: must be one of the known deployment environments ────────
+  // ── 3. JWT_SEED: must be at least 32 characters for cryptographic strength ─
+  const jwtSeed = process.env.JWT_SEED
+  if (jwtSeed && jwtSeed.length < 32) {
+    errors.push(
+      `JWT_SEED is too weak: must be at least 32 characters. ` +
+      `Got length ${jwtSeed.length}. Use a strong random string or generate with: openssl rand -base64 48`
+    )
+  }
+
+  // ── 4. ANTHROPIC_API_KEY: must start with sk-ant- prefix ─────────────────
+  const anthropicKey = process.env.ANTHROPIC_API_KEY
+  if (anthropicKey && !anthropicKey.startsWith('sk-ant-')) {
+    errors.push(
+      `ANTHROPIC_API_KEY is invalid: must start with "sk-ant-". ` +
+      `Got prefix "${anthropicKey.substring(0, 7)}". Get your key from: https://console.anthropic.com/`
+    )
+  }
+
+  // ── 5. TWILIO_AUTH_TOKEN: must be at least 32 characters ───────────────────
+  const twilioToken = process.env.TWILIO_AUTH_TOKEN
+  if (twilioToken && twilioToken.length < 32) {
+    errors.push(
+      `TWILIO_AUTH_TOKEN is too short: must be at least 32 characters. ` +
+      `Got length ${twilioToken.length}. Get your token from: https://console.twilio.com/`
+    )
+  }
+
+  // ── 6. DATABASE_URL: must be valid postgres:// connection string ────────
+  const databaseUrl = process.env.DATABASE_URL
+  if (databaseUrl && !databaseUrl.startsWith('postgresql://') && !databaseUrl.startsWith('postgres://')) {
+    errors.push(
+      `DATABASE_URL is invalid: must start with "postgresql://" or "postgres://". ` +
+      `Got: "${databaseUrl.substring(0, 20)}...". Example: postgresql://user:pass@localhost:5432/dbname`
+    )
+  }
+
+  // ── 7. STELLAR_RPC_URL: must be valid HTTPS URL ───────────────────────────
+  const stellarRpcUrl = process.env.STELLAR_RPC_URL
+  if (stellarRpcUrl && !stellarRpcUrl.startsWith('https://')) {
+    errors.push(
+      `STELLAR_RPC_URL is invalid: must be a valid HTTPS URL. ` +
+      `Got: "${stellarRpcUrl}". Example: https://soroban-testnet.stellar.org`
+    )
+  }
+
+  // ── 8. VAULT_CONTRACT_ID: must start with C (Stellar contract ID format) ──
+  const vaultContractId = process.env.VAULT_CONTRACT_ID
+  if (vaultContractId && !vaultContractId.startsWith('C')) {
+    errors.push(
+      `VAULT_CONTRACT_ID is invalid: must start with "C" (Stellar contract ID format). ` +
+      `Got: "${vaultContractId}". Example: CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`
+    )
+  }
+
+  // ── 9. USDC_TOKEN_ADDRESS: must start with C (Stellar asset contract) ─────
+  const usdcTokenAddress = process.env.USDC_TOKEN_ADDRESS
+  if (usdcTokenAddress && !usdcTokenAddress.startsWith('C')) {
+    errors.push(
+      `USDC_TOKEN_ADDRESS is invalid: must start with "C" (Stellar contract ID format). ` +
+      `Got: "${usdcTokenAddress}". Example: CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`
+    )
+  }
+
+  // ── 10. NODE_ENV: must be one of the known deployment environments ────────
   const nodeEnv = process.env.NODE_ENV
   const validNodeEnvs = ['development', 'staging', 'production', 'test'] as const
   if (nodeEnv && !validNodeEnvs.includes(nodeEnv as any)) {
@@ -60,7 +123,8 @@ function validateAllRequiredEnvVars(): void {
     const list = errors.map(e => `  - ${e}`).join('\n')
     throw new Error(
       `Application cannot start — environment configuration errors:\n${list}\n\n` +
-      `Fix the variables above and restart the application.`
+      `Fix the variables above and restart the application.\n\n` +
+      `Reference: See .env.example for required variables and their formats.`
     )
   }
 }

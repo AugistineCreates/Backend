@@ -2,6 +2,10 @@
 
 This document provides production-grade observability guidance including alert thresholds, Grafana dashboard recommendations, and deployment best practices for the NeuroWealth backend.
 
+**Related Documentation**:
+- **SLO Guidance**: See `docs/SLO_GUIDANCE.md` for latency budgets and performance targets
+- **Runbook**: See `docs/RUNBOOK.md` for incident response procedures
+
 ## Overview
 
 The backend exposes Prometheus-compatible metrics through the `/metrics` endpoint, providing comprehensive visibility into:

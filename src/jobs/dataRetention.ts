@@ -1,8 +1,9 @@
 import db from '../db';
 import { logger, logBackgroundJob } from '../utils/logger';
-import { generateCorrelationId, runWithCorrelationIdAsync, getCorrelationId } from '../utils/correlation';
+import { generateCorrelationId, runWithCorrelationIdAsync } from '../utils/correlation';
 import { config } from '../config/env';
 import { recordBackgroundJob, recordRetentionDeletes } from '../utils/metrics';
+import { recordJobSuccess, recordJobFailure } from '../utils/job-metrics';
 
 function cutoffDate(retentionDays: number): Date {
   const d = new Date();
@@ -23,7 +24,8 @@ export async function cleanupAuthNonces(): Promise<void> {
       const result = await db.authNonce.deleteMany({
         where: { expiresAt: { lt: new Date() } },
       });
-      const duration = (Date.now() - start) / 1000;
+      const durationMs = Date.now() - start;
+      const duration = durationMs / 1000;
 
       logBackgroundJob(jobName, 'success', duration, correlationId, {
         rowsDeleted: result.count,
@@ -33,8 +35,10 @@ export async function cleanupAuthNonces(): Promise<void> {
         recordRetentionDeletes('auth_nonces', result.count);
       }
       recordBackgroundJob(jobName, 'success', duration);
+      recordJobSuccess(jobName, durationMs);
     } catch (error) {
-      const duration = (Date.now() - start) / 1000;
+      const durationMs = Date.now() - start;
+      const duration = durationMs / 1000;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       logBackgroundJob(jobName, 'failed', duration, correlationId, {
@@ -42,6 +46,7 @@ export async function cleanupAuthNonces(): Promise<void> {
       });
 
       recordBackgroundJob(jobName, 'failed', duration);
+      recordJobFailure(jobName, durationMs);
     }
   });
 }
@@ -60,7 +65,8 @@ export async function cleanupProcessedEvents(): Promise<void> {
       const result = await db.processedEvent.deleteMany({
         where: { processedAt: { lt: cutoff } },
       });
-      const duration = (Date.now() - start) / 1000;
+      const durationMs = Date.now() - start;
+      const duration = durationMs / 1000;
 
       logBackgroundJob(jobName, 'success', duration, correlationId, {
         rowsDeleted: result.count,
@@ -71,8 +77,10 @@ export async function cleanupProcessedEvents(): Promise<void> {
         recordRetentionDeletes('processed_events', result.count);
       }
       recordBackgroundJob(jobName, 'success', duration);
+      recordJobSuccess(jobName, durationMs);
     } catch (error) {
-      const duration = (Date.now() - start) / 1000;
+      const durationMs = Date.now() - start;
+      const duration = durationMs / 1000;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       logBackgroundJob(jobName, 'failed', duration, correlationId, {
@@ -81,6 +89,7 @@ export async function cleanupProcessedEvents(): Promise<void> {
       });
 
       recordBackgroundJob(jobName, 'failed', duration);
+      recordJobFailure(jobName, durationMs);
     }
   });
 }
@@ -103,7 +112,8 @@ export async function cleanupDeadLetterEvents(): Promise<void> {
           createdAt: { lt: cutoff },
         },
       });
-      const duration = (Date.now() - start) / 1000;
+      const durationMs = Date.now() - start;
+      const duration = durationMs / 1000;
 
       logBackgroundJob(jobName, 'success', duration, correlationId, {
         rowsDeleted: result.count,
@@ -115,8 +125,10 @@ export async function cleanupDeadLetterEvents(): Promise<void> {
         recordRetentionDeletes('dead_letter_events', result.count);
       }
       recordBackgroundJob(jobName, 'success', duration);
+      recordJobSuccess(jobName, durationMs);
     } catch (error) {
-      const duration = (Date.now() - start) / 1000;
+      const durationMs = Date.now() - start;
+      const duration = durationMs / 1000;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       logBackgroundJob(jobName, 'failed', duration, correlationId, {
@@ -126,6 +138,7 @@ export async function cleanupDeadLetterEvents(): Promise<void> {
       });
 
       recordBackgroundJob(jobName, 'failed', duration);
+      recordJobFailure(jobName, durationMs);
     }
   });
 }
@@ -144,7 +157,8 @@ export async function cleanupAgentLogs(): Promise<void> {
       const result = await db.agentLog.deleteMany({
         where: { createdAt: { lt: cutoff } },
       });
-      const duration = (Date.now() - start) / 1000;
+      const durationMs = Date.now() - start;
+      const duration = durationMs / 1000;
 
       logBackgroundJob(jobName, 'success', duration, correlationId, {
         rowsDeleted: result.count,
@@ -155,8 +169,10 @@ export async function cleanupAgentLogs(): Promise<void> {
         recordRetentionDeletes('agent_logs', result.count);
       }
       recordBackgroundJob(jobName, 'success', duration);
+      recordJobSuccess(jobName, durationMs);
     } catch (error) {
-      const duration = (Date.now() - start) / 1000;
+      const durationMs = Date.now() - start;
+      const duration = durationMs / 1000;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       logBackgroundJob(jobName, 'failed', duration, correlationId, {
@@ -165,6 +181,7 @@ export async function cleanupAgentLogs(): Promise<void> {
       });
 
       recordBackgroundJob(jobName, 'failed', duration);
+      recordJobFailure(jobName, durationMs);
     }
   });
 }

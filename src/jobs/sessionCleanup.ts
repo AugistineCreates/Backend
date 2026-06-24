@@ -1,8 +1,9 @@
 import db from '../db';
 import { logger, logBackgroundJob } from '../utils/logger';
-import { generateCorrelationId, runWithCorrelationIdAsync, getCorrelationId } from '../utils/correlation';
+import { generateCorrelationId, runWithCorrelationIdAsync } from '../utils/correlation';
 import { config } from '../config/env';
 import { recordBackgroundJob } from '../utils/metrics';
+import { recordJobSuccess, recordJobFailure } from '../utils/job-metrics';
 
 /**
  * Delete all sessions whose expiration timestamp is in the past.
@@ -18,15 +19,18 @@ export async function cleanupExpiredSessions(): Promise<void> {
       const result = await db.session.deleteMany({
         where: { expiresAt: { lt: new Date() } },
       });
-      const duration = (Date.now() - startTime) / 1000;
+      const durationMs = Date.now() - startTime;
+      const duration = durationMs / 1000;
 
       logBackgroundJob(jobName, 'success', duration, correlationId, {
         rowsDeleted: result.count,
       });
 
       recordBackgroundJob(jobName, 'success', duration);
+      recordJobSuccess(jobName, durationMs);
     } catch (error) {
-      const duration = (Date.now() - startTime) / 1000;
+      const durationMs = Date.now() - startTime;
+      const duration = durationMs / 1000;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       logBackgroundJob(jobName, 'failed', duration, correlationId, {
@@ -34,6 +38,7 @@ export async function cleanupExpiredSessions(): Promise<void> {
       });
 
       recordBackgroundJob(jobName, 'failed', duration);
+      recordJobFailure(jobName, durationMs);
     }
   });
 }

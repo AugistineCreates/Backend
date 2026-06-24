@@ -4,6 +4,7 @@ import { requireAuth, enforceUserAccess, AuthMiddleware } from '../../../src/mid
 import { JwtAdapter } from '../../../src/config';
 import db from '../../../src/db';
 import { logger } from '../../../src/utils/logger';
+import { makeSession } from '../../fixtures';
 
 jest.mock('../../../src/config');
 jest.mock('../../../src/db');
@@ -48,19 +49,6 @@ describe('Authentication Middleware (Unified)', () => {
     req.header = jest.fn((name: string) =>
       name === 'Authorization' ? `Bearer ${token}` : undefined,
     ) as any;
-  }
-
-  function makeSession(token: string, overrides: Record<string, unknown> = {}) {
-    return {
-      id: 'session1',
-      token,
-      userId: 'user1',
-      expiresAt: new Date(Date.now() + 3_600_000),
-      walletAddress: 'GDZST3XVCDTUJ76ZAV2HA72KYXM4Y5KLTMPQWLBQ3VBLGR4A5YNWHA63',
-      network: Network.MAINNET,
-      user: { id: 'user1', isActive: true },
-      ...overrides,
-    };
   }
 
   describe('requireAuth - JWT + Session Validation', () => {

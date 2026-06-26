@@ -39,6 +39,37 @@ Comprehensive reference for all backend endpoints defined in src/routes.
 
 ---
 
+## Rate Limiting
+
+All rate-limited routes return the following headers on every response:
+
+| Header | Description |
+|---|---|
+| `RateLimit-Limit` | Maximum requests allowed in the current window |
+| `RateLimit-Remaining` | Requests remaining in the current window |
+| `RateLimit-Reset` | Seconds until the window resets |
+| `RateLimit-Policy` | Policy string per IETF draft: `<limit>;w=<window-seconds>` (e.g. `100;w=900`) |
+
+On `429 Too Many Requests` responses, an additional header is included:
+
+| Header | Description |
+|---|---|
+| `Retry-After` | Seconds the client should wait before retrying |
+
+Default limits by route group:
+
+| Limiter | Max requests | Window | Policy header |
+|---|---|---|---|
+| Global (all routes) | 100 | 15 min | `100;w=900` |
+| Auth (`/api/auth/*`) | 20 | 15 min | `20;w=900` |
+| Admin (`/api/admin/*`) | 10 | 15 min | `10;w=900` |
+| Webhook | 30 | 1 min | `30;w=60` |
+| Internal / agent | 500 | 1 min | `500;w=60` |
+
+Limits are configurable via environment variables (e.g. `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS`). Trusted IPs (`TRUSTED_IPS`) and requests bearing a valid `X-Internal-Token` (`INTERNAL_SERVICE_TOKEN`) bypass rate limiting entirely.
+
+---
+
 ## Health
 
 ### GET /health

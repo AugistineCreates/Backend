@@ -11,7 +11,7 @@
 
 ### For DevOps/Deployment
 
-- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Step-by-step deployment instructions
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete deployment guide for all environments
 - **[IMPLEMENTATION_CHECKLIST.md](IMPLEMENTATION_CHECKLIST.md)** - Verification checklist
 
 ### For Project Managers
@@ -87,24 +87,23 @@
 
 ---
 
-### DEPLOYMENT_GUIDE.md
+### DEPLOYMENT.md
 
-**Purpose**: Step-by-step deployment instructions
+**Purpose**: Complete deployment guide for all environments
 **Contents**:
 
-- Pre-deployment checklist
-- Deployment steps (migration, testing, verification)
+- Local development (Docker Compose)
+- Staging (Docker)
+- Production (Kubernetes)
+- Environment variables reference
+- Health probes
+- Secrets management
+- Database migrations
 - Rollback procedure
-- Post-deployment verification
-- Performance monitoring
-- Troubleshooting guide
-- Scaling considerations
-- Maintenance tasks
-- Disaster recovery
-- Success criteria
-- Communication plan
+- Monitoring and observability
+- Troubleshooting
 
-**Read this if**: You are deploying to production or need rollback procedures
+**Read this if**: You are deploying to any environment or need rollback procedures
 
 ---
 
@@ -307,7 +306,7 @@ grep "RPC" logs/*.log
 
 ### For DevOps
 
-1. DEPLOYMENT_GUIDE.md - Deployment steps
+1. DEPLOYMENT.md - Deployment steps
 2. IMPLEMENTATION_CHECKLIST.md - Verification
 3. QUICK_REFERENCE.md - Troubleshooting
 
@@ -342,7 +341,7 @@ For questions or issues:
 
 1. Check QUICK_REFERENCE.md for common questions
 2. Review IMPLEMENTATION_DETAILS.md for technical details
-3. Check DEPLOYMENT_GUIDE.md for deployment issues
+3. Check DEPLOYMENT.md for deployment issues
 4. Review logs for error messages
 5. Contact development team
 
@@ -366,12 +365,12 @@ For questions or issues:
 | QUICK_REFERENCE.md          | 150      | Quick lookup      |
 | CODE_STRUCTURE.md           | 350      | Architecture      |
 | IMPLEMENTATION_DETAILS.md   | 400      | Technical details |
-| DEPLOYMENT_GUIDE.md         | 350      | Deployment        |
+| DEPLOYMENT.md               | 450      | Deployment        |
 | IMPLEMENTATION_CHECKLIST.md | 200      | Verification      |
 | FINAL_SUMMARY.md            | 300      | Executive summary |
 | PR_DESCRIPTION.md           | 30       | PR summary        |
 | IMPLEMENTATION_SUMMARY.md   | 100      | Overview          |
-| **Total Documentation**     | **1880** | **Complete**      |
+| **Total Documentation**     | **1980** | **Complete**      |
 
 ---
 
@@ -380,7 +379,7 @@ For questions or issues:
 1. **Review**: Review all documentation
 2. **Code Review**: Review implementation and tests
 3. **Merge**: Merge to main branch
-4. **Deploy**: Follow DEPLOYMENT_GUIDE.md
+4. **Deploy**: Follow DEPLOYMENT.md
 5. **Monitor**: Monitor event processing
 6. **Verify**: Confirm all systems operational
 

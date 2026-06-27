@@ -22,6 +22,7 @@ import { config } from './config/env'
 import { errorHandler } from './middleware/errorHandler'
 import { correlationIdMiddleware } from './middleware/correlationId'
 import { requestLogger } from './middleware/logger'
+import { requestTimeoutMiddleware } from './middleware/requestTimeout'
 import { rateLimiter, authRateLimiter, adminRateLimiter, internalRateLimiter, webhookRateLimiter, trustedIpBypass } from './middleware/rateLimiter'
 import { configureTrustProxy, securityHeaders, permissionsPolicy } from './middleware/security'
 import { logger } from './utils/logger'
@@ -112,6 +113,7 @@ app.use((req: Request & { user?: { id: string } }, _res: Response, next) => {
 app.use(requestLogger)
 app.use(trustedIpBypass)
 app.use(rateLimiter)
+app.use(requestTimeoutMiddleware)
 
 // ── Readiness / liveness probes ───────────────────────────────────────────────
 

@@ -258,6 +258,7 @@ export const config = {
     /** How often (ms) to poll prisma.$metrics.json() for pool gauges. */
     poolMetricsIntervalMs: parseInt(process.env.DB_POOL_METRICS_INTERVAL_MS || '15000'),
   },
+  requestTimeoutMs: parseInt(process.env.REQUEST_TIMEOUT_MS || '30000'),
   jwt: {
     /**
      * JWT_SEED: 64-hex secret used to sign/verify JWTs.

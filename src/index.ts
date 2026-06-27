@@ -23,7 +23,7 @@ import { errorHandler } from './middleware/errorHandler'
 import { correlationIdMiddleware } from './middleware/correlationId'
 import { requestLogger } from './middleware/logger'
 import { rateLimiter, authRateLimiter, adminRateLimiter, internalRateLimiter, webhookRateLimiter, trustedIpBypass } from './middleware/rateLimiter'
-import { configureTrustProxy, securityHeaders } from './middleware/security'
+import { configureTrustProxy, securityHeaders, permissionsPolicy } from './middleware/security'
 import { logger } from './utils/logger'
 import { startAgentLoop, stopAgentLoop } from './agent/loop'
 import { connectDb } from './db'
@@ -77,7 +77,9 @@ configureTrustProxy(app)
 
 // ── Security and parsing middleware ───────────────────────────────────────────
 
+app.disable('x-powered-by')
 app.use(securityHeaders())
+app.use(permissionsPolicy())
 app.use(corsMiddleware)
 app.use(contentTypeRestrictionMiddleware)
 app.use(jsonBodyParser)

@@ -1,5 +1,23 @@
+/**
+ * ── Telemetry bootstrap ───────────────────────────────────────────────────────
+ *
+ * These two imports MUST come before everything else.
+ *
+ * OTel patches Node.js core modules and popular libraries (Express, Prisma,
+ * http) at require-time via monkey-patching.  Any library imported before the
+ * SDK starts will not be instrumented.
+ *
+ * Sentry's init() must also run before route/middleware imports so the
+ * automatic request/breadcrumb instrumentation is registered.
+ */
+import './telemetry/otel'    // 1. OpenTelemetry — distributed tracing
+import './telemetry/sentry'  // 2. Sentry       — error reporting
+
+// ── Standard imports ──────────────────────────────────────────────────────────
+
 import { type Server } from 'node:http'
-import express from 'express'
+import express, { Request, Response } from 'express'
+import * as Sentry from '@sentry/node'
 import { config } from './config/env'
 import { errorHandler } from './middleware/errorHandler'
 import { correlationIdMiddleware } from './middleware/correlationId'
@@ -27,11 +45,9 @@ import adminRouter from './routes/admin'
 import metricsRouter from './routes/metrics'
 import stellarRouter from './routes/stellar'
 import { corsMiddleware, jsonBodyParser, payloadSizeErrorHandler, urlencodedBodyParser } from './middleware/corsandbody'
+import { setSpanUser } from './telemetry/spans'
 
 // ── Readiness state ───────────────────────────────────────────────────────────
-//
-// We track each critical background service independently so the readiness
-// endpoint can report exactly what is (un)healthy.
 
 interface ServiceStatus {
   ready: boolean
@@ -57,32 +73,42 @@ function allServicesReady(): boolean {
 
 const app = express()
 
-// Trust proxy — required for correct client IP behind Nginx / Cloudflare / Heroku / K8s ingress
 configureTrustProxy(app)
 
-// ── Security and parsing middleware ────────────────────────────────────────
+// ── Security and parsing middleware ───────────────────────────────────────────
+
 app.use(securityHeaders())
-
-// CORS — must come before body parsers so pre-flight OPTIONS is handled
 app.use(corsMiddleware)
-
-// Body parsers with size limits (100 kb default, see config.security.bodySizeLimit)
 app.use(jsonBodyParser)
 app.use(urlencodedBodyParser)
 
-// Request correlation ID — must run before requestLogger
+// Correlation ID — must run before requestLogger
 app.use(correlationIdMiddleware)
 
-// Logging + rate limiting
+// ── User context propagation ──────────────────────────────────────────────────
+//
+// After the auth middleware resolves req.user, propagate the user ID to:
+//  • The active OTel span  (so traces show which user was affected)
+//  • The Sentry scope      (so Sentry issues show affected user counts)
+//
+// This middleware runs after correlation IDs are set but before route handlers.
+// It is a no-op for unauthenticated requests.
+
+app.use((req: Request & { user?: { id: string } }, _res: Response, next) => {
+  if (req.user?.id) {
+    // OTel span
+    setSpanUser(req.user.id)
+    // Sentry scope — user context persists for the life of the request
+    Sentry.setUser({ id: req.user.id })
+  }
+  next()
+})
+
 app.use(requestLogger)
-// Trusted-IP / service-token bypass must run before any rate limiter
 app.use(trustedIpBypass)
 app.use(rateLimiter)
 
 // ── Readiness / liveness probes ───────────────────────────────────────────────
-//
-// Liveness  — is the process running?  Always 200 once the process is up.
-// Readiness — are background services healthy?  Used by load-balancers / K8s.
 
 app.get('/health/live', (_req, res) => {
   res.status(200).json({ status: 'alive', timestamp: new Date().toISOString() })
@@ -126,9 +152,7 @@ app.use('/api/withdraw', withdrawRouter)
 app.use('/api/vault', vaultRouter)
 app.use('/api/analytics', analyticsRouter)
 app.use('/api/stellar', stellarRouter)
-
 app.use('/metrics', metricsRouter)
-// Admin routes (protected, strictest rate limit)
 app.use('/api/admin', adminRateLimiter, adminRouter)
 
 // 413 handler — must be after body parsers, before generic error handler
@@ -136,29 +160,19 @@ app.use(payloadSizeErrorHandler)
 
 // Generic error handler — must always be last
 app.use(errorHandler)
-// ── Graceful shutdown ────────────────────────────────────────────────────────
-//
-// On SIGTERM/SIGINT, we:
-// 1. Mark as shutting down so readiness probe returns 503
-// 2. Close the HTTP server (stops accepting new connections)
-// 3. Wait up to REQUEST_DRAIN_TIMEOUT_MS for in-flight requests to complete
-// 4. Stop event listener
-// 5. Stop agent cron jobs
-// 6. Disconnect Prisma
-// 7. Exit cleanly
+
+// ── Graceful shutdown ─────────────────────────────────────────────────────────
 
 async function gracefulShutdown(signal: string): Promise<void> {
   logger.info(`[Shutdown] Received ${signal}, initiating graceful shutdown...`)
   isShuttingDown = true
 
-  // Stop the session cleanup interval so it doesn't fire during shutdown
   if (sessionCleanupHandle) {
     clearInterval(sessionCleanupHandle)
     sessionCleanupHandle = null
     logger.info('[Shutdown] Session cleanup timer cleared')
   }
 
-  // Stop the data retention interval
   if (dataRetentionHandle) {
     clearInterval(dataRetentionHandle)
     dataRetentionHandle = null
@@ -182,9 +196,12 @@ async function gracefulShutdown(signal: string): Promise<void> {
       await stopAgentLoop()
 
       logger.info('[Shutdown] Disconnecting Prisma...')
-      // Importing here to avoid circular dependency
       const db = await import('./db').then(m => m.default)
       await db.$disconnect()
+
+      // Flush Sentry queue before exiting so no error events are dropped
+      logger.info('[Shutdown] Flushing Sentry event queue...')
+      await Sentry.flush(2_000)
 
       logger.info('[Shutdown] ✓ All services stopped gracefully')
       process.exit(0)
@@ -196,7 +213,6 @@ async function gracefulShutdown(signal: string): Promise<void> {
     }
   })
 
-  // Force shutdown after configurable timeout
   setTimeout(() => {
     logger.error('[Shutdown] Grace period exhausted, forcing shutdown...')
     process.exit(1)
@@ -204,25 +220,14 @@ async function gracefulShutdown(signal: string): Promise<void> {
 }
 
 // ── Startup sequence ──────────────────────────────────────────────────────────
-//
-// The HTTP server does NOT start accepting connections until every critical
-// service initialises successfully.  If any service fails, we log clearly
-// and exit with a nonzero code so process supervisors / K8s restart us.
 
 async function initServices(): Promise<void> {
-  // 0. Validate startup configuration
-
-  // Admin access is now validated via scoped database-backed credentials.
-  // The legacy shared ADMIN_API_TOKEN is no longer required at startup.
   if (config.nodeEnv === 'production') {
     logger.info('[Startup] Admin access will use database-backed scoped credentials ✓')
   }
 
-  // Twilio auth token — WhatsApp routes are always mounted; reject at startup
-  // if the token is absent so spoofed webhook calls are impossible.
   if (!process.env.TWILIO_AUTH_TOKEN) {
-    const msg =
-      'TWILIO_AUTH_TOKEN must be set — WhatsApp webhook signature validation requires it'
+    const msg = 'TWILIO_AUTH_TOKEN must be set — WhatsApp webhook signature validation requires it'
     logger.error('[Startup] Configuration validation failed — cannot continue', { error: msg })
     throw new Error(msg)
   }
@@ -269,11 +274,16 @@ async function main(): Promise<void> {
   logger.info(`[Startup] NeuroWealth backend initialising`)
   logger.info(`[Startup] NODE_ENV=${config.nodeEnv}  network=${config.stellar.network}  port=${config.port}`)
 
-  // Initialise all services BEFORE opening the HTTP port.
-  // Any failure here exits the process — the server never starts.
   try {
     await initServices()
   } catch (initError) {
+    // Report startup failures to Sentry before exiting
+    Sentry.captureException(initError, {
+      tags: { phase: 'startup' },
+      extra: { failedServices: Object.entries(serviceStatus).filter(([, s]) => !s.ready) },
+    })
+    await Sentry.flush(2_000)
+
     logger.error('[Startup] One or more critical services failed to initialise:')
     logger.error(
       Object.entries(serviceStatus)
@@ -284,37 +294,43 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  // All services healthy — now accept traffic
   httpServer = app.listen(config.port, () => {
     logger.info(`[Startup] HTTP server listening on port ${config.port} ✓`)
     logger.info('[Startup] All systems operational — ready to serve requests')
   })
 
-  // Register graceful shutdown handlers
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
   process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 
-  // Non-critical jobs start after the server is up
   sessionCleanupHandle = scheduleSessionCleanup()
   dataRetentionHandle = scheduleDataRetention()
 }
 
 // ── Process-level error guards ────────────────────────────────────────────────
+//
+// These are last-resort guards. Sentry.captureException is called here so
+// fatal crashes that bypass the errorHandler middleware are still reported.
 
 process.on('uncaughtException', (error) => {
   logger.error('[Process] Uncaught exception — exiting for safety:', error)
-  process.exit(1)
+  Sentry.captureException(error, { tags: { type: 'uncaughtException' } })
+  // Best-effort flush — process will exit either way
+  Sentry.flush(2_000).finally(() => process.exit(1))
 })
 
 process.on('unhandledRejection', (reason) => {
   logger.error('[Process] Unhandled promise rejection — exiting for safety:', reason)
-  process.exit(1)
+  Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)), {
+    tags: { type: 'unhandledRejection' },
+  })
+  Sentry.flush(2_000).finally(() => process.exit(1))
 })
 
 if (require.main === module) {
   main().catch((error) => {
     logger.error('[Startup] Unexpected fatal error:', error)
-    process.exit(1)
+    Sentry.captureException(error, { tags: { phase: 'main' } })
+    Sentry.flush(2_000).finally(() => process.exit(1))
   })
 }
 
